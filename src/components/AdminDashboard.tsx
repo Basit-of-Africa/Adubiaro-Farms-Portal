@@ -430,7 +430,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
           </div>
           <div>
             <div className="text-[9px] font-mono uppercase text-gray-400 font-bold tracking-wider">Invested Capital</div>
-            <div className="text-xl font-bold text-[#1B4332] font-serif mt-0.5">${stats?.totalInvestment?.toLocaleString()}</div>
+            <div className="text-xl font-bold text-[#1B4332] font-serif mt-0.5">₦{stats?.totalInvestment?.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -608,7 +608,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Amount ($)</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Amount (₦)</label>
                     <input
                       type="number"
                       required
@@ -960,7 +960,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Investment amount ($)</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Investment amount (₦)</label>
                     <input
                       type="number"
                       placeholder="e.g. 24000"

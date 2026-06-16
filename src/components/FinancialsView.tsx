@@ -114,7 +114,7 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
           </div>
           <div>
             <div className="text-[10px] font-mono text-gray-400 font-bold uppercase tracking-wider">Distributed Payouts</div>
-            <div className="text-xl font-extrabold text-[#1B4332] font-sans mt-1">${totalPaid?.toLocaleString()}</div>
+            <div className="text-xl font-extrabold text-[#1B4332] font-sans mt-1">₦{totalPaid?.toLocaleString()}</div>
           </div>
         </div>
 
@@ -124,7 +124,7 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
           </div>
           <div>
             <div className="text-[10px] font-mono text-gray-400 font-bold uppercase tracking-wider">Pending Disburse</div>
-            <div className="text-xl font-extrabold text-gray-800 font-sans mt-1">${totalPending?.toLocaleString()}</div>
+            <div className="text-xl font-extrabold text-gray-800 font-sans mt-1">₦{totalPending?.toLocaleString()}</div>
           </div>
         </div>
 
@@ -181,7 +181,7 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
                     )}
                     <td className="py-5 px-3 text-center font-mono text-[#1B4332] font-extrabold">{fin.plotNumber}</td>
                     <td className="py-5 px-3 text-[#2c3e35]/80 font-medium font-mono text-[11px] truncate">{fin.cropType}</td>
-                    <td className="py-5 px-3 text-right font-sans font-extrabold text-[#1B4332]">${fin.payoutAmount?.toLocaleString()}</td>
+                    <td className="py-5 px-3 text-right font-sans font-extrabold text-[#1B4332]">₦{fin.payoutAmount?.toLocaleString()}</td>
                     <td className="py-5 px-3 text-center font-mono font-extrabold text-[#D4A017]">{fin.roiPercentage}%</td>
                     <td className="py-5 px-3 text-gray-400 font-mono text-[11px] font-semibold">{fin.payoutDate}</td>
                     <td className="py-5 px-3 text-center">

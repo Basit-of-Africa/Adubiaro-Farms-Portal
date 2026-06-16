@@ -207,26 +207,7 @@ export default function App() {
           />
         )}
 
-        {/* Django project instructions shortcut section */}
-        <div className="mt-16 border-t border-gray-200 pt-8 max-w-4xl">
-          <div className="bg-white p-6 rounded-2xl border border-dashed border-gray-200 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <FolderGit2 className="h-5 w-5 text-[#1B4332]" />
-              <h3 className="font-sans font-bold text-sm text-gray-800">Exportable Django Core Project Ready</h3>
-            </div>
-            
-            <p className="text-[11.5px] leading-relaxed text-gray-500 font-sans">
-              We have compiled a complete, beautifully structured, and fully functional Django project code inside your repository folder <code>/django_project/</code>. You can instantly inspect it in your file hierarchy or download it as a standalone ZIP archive using the settings icon in your workspace menu. It contains all DB mapping files, secure download endpoints, SMTP custom emails modules, white-noise files, and nixpacks configs ready for immediate deploy on Railway or local SQLite.
-            </p>
 
-            <div className="flex flex-wrap gap-2 text-[10px] font-mono select-none">
-              <span className="bg-[#1B4332]/10 text-[#1B4332] px-2.5 py-1 rounded">DJANGO 4.2+</span>
-              <span className="bg-[#1B4332]/10 text-[#1B4332] px-2.5 py-1 rounded">POSTGRESQL CAPABLE</span>
-              <span className="bg-amber-50 text-amber-800 px-2.5 py-1 border border-amber-200/50 rounded">CLOUDINARY STORAGE</span>
-              <span className="bg-emerald-50 text-emerald-800 px-2.5 py-1 border border-emerald-200/50 rounded">WHITENOISE EXCELLENCE</span>
-            </div>
-          </div>
-        </div>
 
       </main>
     </div>
