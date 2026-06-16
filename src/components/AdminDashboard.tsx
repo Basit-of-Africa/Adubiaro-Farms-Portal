@@ -17,7 +17,9 @@ import {
   Briefcase, 
   CheckCircle2, 
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Edit,
+  Layers
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
 
@@ -41,7 +43,18 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [systemPlots, setSystemPlots] = useState<any[]>([]);
 
   // Form states
-  const [activeFormTab, setActiveFormTab] = useState<'payout' | 'document' | 'user' | 'plot' | 'assign'>('payout');
+  const [activeFormTab, setActiveFormTab] = useState<'payout' | 'document' | 'user' | 'plot' | 'assign' | 'farms'>('payout');
+
+  // 6. Manage Farm Estates (Add/Edit)
+  const [selectedFarmToEdit, setSelectedFarmToEdit] = useState<string>('new'); // 'new' or specific farm.id
+  const [farmName, setFarmName] = useState('');
+  const [farmLocation, setFarmLocation] = useState('');
+  const [farmState, setFarmState] = useState('');
+  const [farmCoverImage, setFarmCoverImage] = useState('');
+  const [farmDescription, setFarmDescription] = useState('');
+  const [farmDateEstablished, setFarmDateEstablished] = useState('');
+  const [farmIsActive, setFarmIsActive] = useState(true);
+  const [farmSuccessMessage, setFarmSuccessMessage] = useState<string | null>(null);
 
   // 1. Create User
   const [newUsername, setNewUsername] = useState('');
@@ -332,6 +345,94 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     }
   };
 
+  // Handle select farm to edit changes or load initial values
+  const handleSelectFarmToEditChange = (farmId: string) => {
+    setSelectedFarmToEdit(farmId);
+    setFarmSuccessMessage(null);
+    if (farmId === 'new') {
+      setFarmName('');
+      setFarmLocation('');
+      setFarmState('');
+      setFarmCoverImage('');
+      setFarmDescription('');
+      setFarmDateEstablished(new Date().toISOString().split('T')[0]);
+      setFarmIsActive(true);
+    } else {
+      const farm = farms.find(f => f.id === farmId);
+      if (farm) {
+        setFarmName(farm.name);
+        setFarmLocation(farm.location);
+        setFarmState(farm.state);
+        setFarmCoverImage(farm.coverImage || '');
+        setFarmDescription(farm.description || '');
+        setFarmDateEstablished(farm.dateEstablished || '');
+        setFarmIsActive(farm.isActive);
+      }
+    }
+  };
+
+  // Submit Farm addition or edit
+  const handleSaveFarmEstate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFarmSuccessMessage(null);
+
+    try {
+      const isNew = selectedFarmToEdit === 'new';
+      const endpoint = isNew ? '/api/admin/farms/create' : `/api/admin/farms/${selectedFarmToEdit}/update`;
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: farmName,
+          location: farmLocation,
+          state: farmState,
+          coverImage: farmCoverImage,
+          description: farmDescription,
+          dateEstablished: farmDateEstablished,
+          isActive: farmIsActive
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save estate details');
+
+      if (isNew) {
+        setFarmSuccessMessage(`New Farm Estate "${data.name}" added successfully!`);
+        // Reset state
+        setFarmName('');
+        setFarmLocation('');
+        setFarmState('');
+        setFarmCoverImage('');
+        setFarmDescription('');
+        setFarmDateEstablished('');
+      } else {
+        setFarmSuccessMessage(`Farm Estate "${data.name}" updated successfully!`);
+      }
+
+      triggerRefreshSignal();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleQuickEditFarm = (farm: Farm, e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent clicking cards to also explore
+    setActiveFormTab('farms');
+    setSelectedFarmToEdit(farm.id);
+    setFarmName(farm.name);
+    setFarmLocation(farm.location);
+    setFarmState(farm.state);
+    setFarmCoverImage(farm.coverImage || '');
+    setFarmDescription(farm.description || '');
+    setFarmDateEstablished(farm.dateEstablished || '');
+    setFarmIsActive(farm.isActive);
+    setFarmSuccessMessage(null);
+  };
+
   // System Db Reset Seed
   const handleResetDb = async () => {
     if (!window.confirm('Restore system state to pristine seed values? This deletes custom plots.')) return;
@@ -451,6 +552,15 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
               >
                 <div className="relative h-40 bg-gray-100 overflow-hidden">
                   <img src={farm.coverImage} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                  <div className="absolute top-3 left-3 z-10">
+                    <button
+                      onClick={(e) => handleQuickEditFarm(farm, e)}
+                      className="bg-white/95 hover:bg-white text-[#1B4332] py-1 px-2 rounded-lg shadow-md border border-[#1B4332]/10 cursor-pointer transition flex items-center gap-1 text-[9px] font-bold font-sans"
+                    >
+                      <Edit className="h-2.5 w-2.5 text-[#2D6A4F]" />
+                      <span>Edit Estate</span>
+                    </button>
+                  </div>
                   <div className="absolute top-3 right-3 bg-[#1B4332] text-white text-[9px] uppercase font-bold font-mono px-3 py-1 rounded-full border border-[#52B788]/20 shadow-sm">
                     Active Operations
                   </div>
@@ -535,6 +645,18 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
             >
               <Briefcase className="h-3.5 w-3.5" />
               <span>Assign Managers</span>
+            </button>
+
+            <button
+              onClick={() => setActiveFormTab('farms')}
+              className={`px-4 py-3.5 text-[11px] font-mono font-bold uppercase tracking-wider border-b-2 flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 ${
+                activeFormTab === 'farms' 
+                  ? 'border-[#1B4332] text-[#1B4332] bg-white font-black' 
+                  : 'border-transparent text-gray-400 hover:text-gray-700'
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>Manage Estates</span>
             </button>
           </div>
 
@@ -1028,6 +1150,157 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                 >
                   <PlusCircle className="h-4 w-4" />
                   <span>Map manager assignment</span>
+                </button>
+              </form>
+            )}
+
+            {/* MANAGE FARM ESTATES */}
+            {activeFormTab === 'farms' && (
+              <form onSubmit={handleSaveFarmEstate} className="space-y-4">
+                <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-2">
+                  <Layers className="text-[#1B4332] h-4 w-4" />
+                  <h3 className="font-sans font-bold text-sm text-gray-800">Configure & Manage Farm Estates</h3>
+                </div>
+
+                {farmSuccessMessage && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>{farmSuccessMessage}</span>
+                  </div>
+                )}
+
+                <div className="bg-[#FBF9F4] p-3 rounded-xl border border-[#2D6A4F]/10 mb-2">
+                  <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Operation Mode</label>
+                  <select
+                    value={selectedFarmToEdit}
+                    onChange={(e) => handleSelectFarmToEditChange(e.target.value)}
+                    className="w-full text-xs font-sans font-semibold border border-[#1B4332]/25 rounded-lg p-2.5 bg-white text-[#1B4332] focus:outline-[#1B4332]"
+                  >
+                    <option value="new">🆕 [+ Add New Farm Estate]</option>
+                    {farms.map(f => (
+                      <option key={f.id} value={f.id}>✏️ [Modify] {f.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Estate name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Adubiaro Cocoa Estate"
+                      value={farmName}
+                      onChange={(e) => setFarmName(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Date established</label>
+                    <input
+                      type="date"
+                      required
+                      value={farmDateEstablished}
+                      onChange={(e) => setFarmDateEstablished(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Location city / area</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Owo"
+                      value={farmLocation}
+                      onChange={(e) => setFarmLocation(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">State region</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Ondo State"
+                      value={farmState}
+                      onChange={(e) => setFarmState(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Cover Image URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={farmCoverImage}
+                    onChange={(e) => setFarmCoverImage(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50 mb-2"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <span className="text-[9px] text-gray-400 font-mono font-bold self-center">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() => setFarmCoverImage('https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=800')}
+                      className="bg-gray-100 hover:bg-gray-200 text-[9px] text-gray-600 px-2 py-1 rounded cursor-pointer border border-gray-200"
+                    >
+                      🌱 Palm Nursery
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFarmCoverImage('https://images.unsplash.com/photo-1516253593875-bd7ba052fbc5?auto=format&fit=crop&q=80&w=800')}
+                      className="bg-gray-100 hover:bg-gray-200 text-[9px] text-gray-600 px-2 py-1 rounded cursor-pointer border border-gray-200"
+                    >
+                      🌴 Mature Oil Palm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFarmCoverImage('https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&q=80&w=800')}
+                      className="bg-gray-100 hover:bg-gray-200 text-[9px] text-gray-600 px-2 py-1 rounded cursor-pointer border border-gray-200"
+                    >
+                      🚜 Cocoa Farms
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Estate description & scope</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder="Introduce physical crop capabilities, yield expectations, and infrastructural configurations..."
+                    value={farmDescription}
+                    onChange={(e) => setFarmDescription(e.target.value)}
+                    className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex flex-col">
+                    <span className="text-[11px] font-sans font-bold text-gray-700">Estate active status</span>
+                    <span className="text-[9px] text-gray-400 font-sans">Active estates enable interactive tracking logs</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input 
+                      type="checkbox" 
+                      checked={farmIsActive}
+                      onChange={(e) => setFarmIsActive(e.target.checked)}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#52B788]"></div>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-[#1B4332] hover:bg-[#2D6A4F] text-white text-xs font-mono font-bold p-3 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span>{selectedFarmToEdit === 'new' ? 'Register New Farm Estate' : 'Commit Modified Farm Details'}</span>
                 </button>
               </form>
             )}

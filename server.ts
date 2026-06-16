@@ -1175,6 +1175,69 @@ app.post('/api/admin/plots/create', requireAuth, (req, res) => {
   res.status(201).json({ plot: newPlot });
 });
 
+// Admin route to create a farm estate
+app.post('/api/admin/farms/create', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { name, location, state, coverImage, description, dateEstablished, isActive } = req.body;
+
+  if (!name || !location || !state) {
+    return res.status(400).json({ error: 'Name, location and state are required.' });
+  }
+
+  const farmId = 'farm-' + Date.now();
+  const newFarm: Farm = {
+    id: farmId,
+    name,
+    location,
+    state,
+    totalPlots: 0,
+    totalHectares: 0,
+    description: description || '',
+    coverImage: coverImage || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=800',
+    dateEstablished: dateEstablished || new Date().toISOString().split('T')[0],
+    isActive: isActive !== undefined ? Boolean(isActive) : true
+  };
+
+  db.farms.push(newFarm);
+  saveDb();
+  res.status(201).json(newFarm);
+});
+
+// Admin route to update an existing farm estate
+app.post('/api/admin/farms/:id/update', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const farmId = req.params.id;
+  const farm = db.farms.find(f => f.id === farmId);
+  if (!farm) {
+    return res.status(404).json({ error: 'Farm estate not found' });
+  }
+
+  const { name, location, state, coverImage, description, dateEstablished, isActive } = req.body;
+
+  if (name !== undefined) farm.name = name;
+  if (location !== undefined) farm.location = location;
+  if (state !== undefined) farm.state = state;
+  if (coverImage !== undefined) farm.coverImage = coverImage;
+  if (description !== undefined) farm.description = description;
+  if (dateEstablished !== undefined) farm.dateEstablished = dateEstablished;
+  if (isActive !== undefined) farm.isActive = Boolean(isActive);
+
+  // Re-calculate total plots and total hectares
+  farm.totalPlots = db.plots.filter(p => p.farmId === farmId).length;
+  farm.totalHectares = db.plots.filter(p => p.farmId === farmId).reduce((s, p) => s + p.sizeHectares, 0);
+
+  saveDb();
+  res.json(farm);
+});
+
 // Admin route to assign farm manager mapping
 app.post('/api/admin/assignments/create', requireAuth, (req, res) => {
   const user = (req as any).user as User;
