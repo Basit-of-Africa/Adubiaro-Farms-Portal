@@ -19,7 +19,9 @@ import {
   ShieldAlert,
   ArrowRight,
   Edit,
-  Layers
+  Layers,
+  UploadCloud,
+  Sparkles
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
 
@@ -55,6 +57,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [farmDateEstablished, setFarmDateEstablished] = useState('');
   const [farmIsActive, setFarmIsActive] = useState(true);
   const [farmSuccessMessage, setFarmSuccessMessage] = useState<string | null>(null);
+  const [isDraggingEstateImage, setIsDraggingEstateImage] = useState(false);
 
   // 1. Create User
   const [newUsername, setNewUsername] = useState('');
@@ -345,6 +348,21 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     }
   };
 
+  const parseAndSetCoverPhoto = (file: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image is customly large. Please select an image under 5MB for optimized storage.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setFarmCoverImage(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Handle select farm to edit changes or load initial values
   const handleSelectFarmToEditChange = (farmId: string) => {
     setSelectedFarmToEdit(farmId);
@@ -450,6 +468,26 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     }
   };
 
+  // Clean Slate for Production Mode
+  const handleCleanSlate = async () => {
+    if (!window.confirm('Wipe ALL demo data (farms, plots, investments, announcements, documents, and other users) and enter Production Mode? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/api/admin/clean-slate', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        alert('All demo data cleared successfully! Your database is now fresh, clean, and ready for real data.');
+        triggerRefreshSignal();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Clean slate action failed.');
+      }
+    } catch (err) {
+      alert('Action failed.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12 min-h-[400px]">
@@ -475,7 +513,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
           <h1 className="font-serif font-extrabold text-2xl text-[#1B4332] tracking-wide">Super Admin Hub</h1>
           <p className="text-xs text-gray-400 font-mono mt-1 font-bold">Full system status & security role controller</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           <button
             onClick={fetchStatsAndLists}
             className="flex items-center gap-2 px-4 py-2 border border-[#2D6A4F]/15 text-gray-600 rounded-xl text-xs font-mono font-bold cursor-pointer hover:bg-gray-50 transition shadow-sm"
@@ -489,6 +527,13 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
           >
             <ShieldAlert className="h-3.5 w-3.5" />
             <span>Reset Database Seed</span>
+          </button>
+          <button
+            onClick={handleCleanSlate}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-mono font-bold cursor-pointer shadow-sm transition"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Go Live — Wipe Demo Data</span>
           </button>
         </div>
       </div>
@@ -1231,17 +1276,90 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                     />
                   </div>
                 </div>
+                           <div className="space-y-3">
+                  <span className="block text-[10px] uppercase font-mono font-bold text-gray-400">Estate Cover Image</span>
+                  
+                  {/* Drag-and-drop container */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingEstateImage(true);
+                    }}
+                    onDragLeave={() => setIsDraggingEstateImage(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingEstateImage(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) parseAndSetCoverPhoto(file);
+                    }}
+                    onClick={() => document.getElementById('estate-cover-file-input')?.click()}
+                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition duration-200 flex flex-col items-center justify-center gap-2 ${
+                      isDraggingEstateImage 
+                        ? 'border-[#52B788] bg-[#52B788]/10 text-[#1B4332]' 
+                        : 'border-[#2D6A4F]/20 hover:border-[#1B4332] bg-white text-gray-400 hover:text-gray-700'
+                    }`}
+                  >
+                    <input
+                      id="estate-cover-file-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) parseAndSetCoverPhoto(file);
+                      }}
+                      className="hidden"
+                    />
+                    <UploadCloud className="h-8 w-8 text-[#2D6A4F]" />
+                    <div className="font-sans font-bold text-xs text-[#1B4332]">
+                      Click to upload cover image or drag & drop here
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-sans">
+                      Supports JPG, PNG or WEBP (optimized automatic system resizing)
+                    </p>
+                  </div>
 
-                <div>
-                  <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Cover Image URL</label>
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/..."
-                    value={farmCoverImage}
-                    onChange={(e) => setFarmCoverImage(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50 mb-2"
-                  />
-                  <div className="flex flex-wrap gap-2">
+                  {/* Preview if image is present */}
+                  {farmCoverImage && (
+                    <div className="flex items-center gap-3 bg-white p-3.5 rounded-2xl border border-gray-150 relative overflow-hidden group">
+                      <img 
+                        src={farmCoverImage} 
+                        alt="Preview" 
+                        className="h-14 w-20 object-cover rounded-xl border border-gray-100"
+                        onError={(e) => {
+                          // Fallback to placeholder if url loads incorrectly
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=800';
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] font-mono text-gray-400 font-bold uppercase tracking-wider">Active Image Preview</div>
+                        <div className="text-xs text-[#1B4332] font-semibold truncate max-w-xs">
+                          {farmCoverImage.startsWith('data:') ? 'Custom Base64 Upload File' : farmCoverImage}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFarmCoverImage('')}
+                        className="text-red-500 hover:text-red-700 text-[10px] font-sans font-bold hover:underline cursor-pointer select-none"
+                      >
+                        Reset / Clear
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Fallback Direct Link URL */}
+                  <div>
+                    <label className="block text-[9px] uppercase font-mono font-bold mb-1 text-gray-400">Or Option B: Provide Direct Image Web URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={farmCoverImage.startsWith('data:') ? '' : farmCoverImage}
+                      onChange={(e) => setFarmCoverImage(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                    />
+                  </div>
+
+                  {/* Preset quick buttons */}
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <span className="text-[9px] text-gray-400 font-mono font-bold self-center">Presets:</span>
                     <button
                       type="button"

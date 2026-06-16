@@ -3,10 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
+import pg from 'pg';
 import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
@@ -362,22 +366,570 @@ function getInitialDb(): DatabaseSchema {
   };
 }
 
-let db: DatabaseSchema;
-if (fs.existsSync(DB_FILE)) {
+let db: DatabaseSchema = getInitialDb();
+let pgPool: pg.Pool | null = null;
+let usePostgres = false;
+
+// Helpers to map rows from PostgreSQL to TypeScript structures
+function mapUserFromDb(row: any): User {
+  return {
+    id: row.id,
+    username: row.username,
+    role: row.role as UserRole,
+    phone: row.phone || undefined,
+    email: row.email,
+    name: row.name
+  };
+}
+
+function mapFarmFromDb(row: any): Farm {
+  return {
+    id: row.id,
+    name: row.name,
+    location: row.location,
+    state: row.state,
+    totalPlots: Number(row.total_plots || 0),
+    totalHectares: Number(row.total_hectares || 0),
+    description: row.description || '',
+    coverImage: row.cover_image || '',
+    dateEstablished: row.date_established || '',
+    isActive: Boolean(row.is_active)
+  };
+}
+
+function mapPlotFromDb(row: any): FarmPlot {
+  return {
+    id: row.id,
+    farmId: row.farm_id,
+    plotNumber: row.plot_number,
+    sizeHectares: Number(row.size_hectares || 0),
+    cropType: row.crop_type,
+    status: row.status as PlotStatus
+  };
+}
+
+function mapInvestorPlotFromDb(row: any): InvestorPlot {
+  return {
+    id: row.id,
+    investorId: row.investor_id,
+    plotId: row.plot_id,
+    investmentAmount: Number(row.investment_amount || 0),
+    ownershipPercentage: Number(row.ownership_percentage || 100),
+    startDate: row.start_date,
+    contractRef: row.contract_ref || '',
+    isActive: Boolean(row.is_active)
+  };
+}
+
+function mapAssignmentFromDb(row: any): FarmManagerAssignment {
+  return {
+    id: row.id,
+    managerId: row.manager_id,
+    farmId: row.farm_id,
+    assignedDate: row.assigned_date,
+    isActive: Boolean(row.is_active)
+  };
+}
+
+function mapUpdateFromDb(row: any): FarmUpdate {
+  let targetInvestorIds: string[] = [];
+  if (row.target_investor_ids) {
+    targetInvestorIds = Array.isArray(row.target_investor_ids)
+      ? row.target_investor_ids
+      : typeof row.target_investor_ids === 'string'
+        ? JSON.parse(row.target_investor_ids)
+        : JSON.parse(JSON.stringify(row.target_investor_ids));
+  }
+  let photos: any[] = [];
+  if (row.photos) {
+    photos = Array.isArray(row.photos)
+      ? row.photos
+      : typeof row.photos === 'string'
+        ? JSON.parse(row.photos)
+        : JSON.parse(JSON.stringify(row.photos));
+  }
+  return {
+    id: row.id,
+    farmId: row.farm_id,
+    postedBy: row.posted_by,
+    postedByName: row.posted_by_name,
+    title: row.title,
+    body: row.body,
+    updateType: row.update_type as UpdateType,
+    targetInvestorIds,
+    isPublished: Boolean(row.is_published),
+    createdAt: row.created_at,
+    photos
+  };
+}
+
+function mapDocumentFromDb(row: any): Document {
+  return {
+    id: row.id,
+    farmId: row.farm_id,
+    plotId: row.plot_id || undefined,
+    uploadedBy: row.uploaded_by,
+    uploadedByName: row.uploaded_by_name,
+    title: row.title,
+    fileUrl: row.file_url,
+    fileName: row.file_name,
+    category: row.category as DocumentCategory,
+    visibility: row.visibility as DocumentVisibility,
+    description: row.description || undefined,
+    uploadedAt: row.uploaded_at
+  };
+}
+
+function mapFinancialFromDb(row: any): FinancialSummary {
+  return {
+    id: row.id,
+    plotId: row.plot_id,
+    uploadedBy: row.uploaded_by,
+    period: row.period,
+    year: Number(row.year),
+    roiPercentage: Number(row.roi_percentage || 0),
+    payoutAmount: Number(row.payout_amount || 0),
+    payoutDate: row.payout_date,
+    status: row.status as FinancialStatus,
+    notes: row.notes || undefined
+  };
+}
+
+function mapSimulatedEmailFromDb(row: any): SimulatedEmail {
+  return {
+    id: row.id,
+    to: row.to_address,
+    subject: row.subject,
+    body: row.body,
+    htmlBody: row.html_body,
+    sentAt: row.sent_at,
+    category: row.category
+  };
+}
+
+// Truncates all PostgreSQL tables (used primarily during database reset command)
+async function resetPostgresDb() {
+  if (!pgPool) return;
+  const client = await pgPool.connect();
   try {
-    db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    console.log('✅ Local Database loaded successfully from file');
-  } catch (e) {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE TABLE simulated_emails, financials, documents, updates, assignments, investor_plots, plots, farms, users CASCADE;');
+    await client.query('COMMIT');
+    console.log('✅ Truncated all PostgreSQL tables prior to seed restore.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to truncate PostgreSQL tables during reset:', err);
+  } finally {
+    client.release();
+  }
+}
+
+// Clears all non-admin data for a production clean slate
+async function clearAllButAdminPostgres() {
+  if (!pgPool) return;
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("DELETE FROM users WHERE role != 'ADMIN';");
+    await client.query('TRUNCATE TABLE simulated_emails, financials, documents, updates, assignments, investor_plots, plots, farms CASCADE;');
+    await client.query('COMMIT');
+    console.log('✅ Cleared all non-admin records in PostgreSQL for clean slate.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to clean PostgreSQL tables for clear slate:', err);
+  } finally {
+    client.release();
+  }
+}
+
+// Synchronize in-memory changes with PostgreSQL database tables using upserts
+async function saveDbToPostgres() {
+  if (!pgPool) return;
+
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Synchronize Users
+    for (const user of db.users) {
+      await client.query(
+        `INSERT INTO users (id, username, role, phone, email, name)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO UPDATE SET
+           username = EXCLUDED.username,
+           role = EXCLUDED.role,
+           phone = EXCLUDED.phone,
+           email = EXCLUDED.email,
+           name = EXCLUDED.name`,
+        [user.id, user.username, user.role, user.phone || null, user.email, user.name]
+      );
+    }
+
+    // 2. Synchronize Farms
+    for (const farm of db.farms) {
+      await client.query(
+        `INSERT INTO farms (id, name, location, state, total_plots, total_hectares, description, cover_image, date_established, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           location = EXCLUDED.location,
+           state = EXCLUDED.state,
+           total_plots = EXCLUDED.total_plots,
+           total_hectares = EXCLUDED.total_hectares,
+           description = EXCLUDED.description,
+           cover_image = EXCLUDED.cover_image,
+           date_established = EXCLUDED.date_established,
+           is_active = EXCLUDED.is_active`,
+        [farm.id, farm.name, farm.location, farm.state, farm.totalPlots, farm.totalHectares, farm.description || null, farm.coverImage || null, farm.dateEstablished || null, farm.isActive]
+      );
+    }
+
+    // 3. Synchronize Plots
+    for (const plot of db.plots) {
+      await client.query(
+        `INSERT INTO plots (id, farm_id, plot_number, size_hectares, crop_type, status)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO UPDATE SET
+           farm_id = EXCLUDED.farm_id,
+           plot_number = EXCLUDED.plot_number,
+           size_hectares = EXCLUDED.size_hectares,
+           crop_type = EXCLUDED.crop_type,
+           status = EXCLUDED.status`,
+        [plot.id, plot.farmId, plot.plotNumber, plot.sizeHectares, plot.cropType, plot.status]
+      );
+    }
+
+    // 4. Synchronize Investor Plots
+    for (const ip of db.investorPlots) {
+      await client.query(
+        `INSERT INTO investor_plots (id, investor_id, plot_id, investment_amount, ownership_percentage, start_date, contract_ref, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (id) DO UPDATE SET
+           investor_id = EXCLUDED.investor_id,
+           plot_id = EXCLUDED.plot_id,
+           investment_amount = EXCLUDED.investment_amount,
+           ownership_percentage = EXCLUDED.ownership_percentage,
+           start_date = EXCLUDED.start_date,
+           contract_ref = EXCLUDED.contract_ref,
+           is_active = EXCLUDED.is_active`,
+        [ip.id, ip.investorId, ip.plotId, ip.investmentAmount, ip.ownershipPercentage, ip.startDate, ip.contractRef || null, ip.isActive]
+      );
+    }
+
+    // 5. Synchronize Assignments
+    for (const assign of db.assignments) {
+      await client.query(
+        `INSERT INTO assignments (id, manager_id, farm_id, assigned_date, is_active)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET
+           manager_id = EXCLUDED.manager_id,
+           farm_id = EXCLUDED.farm_id,
+           assigned_date = EXCLUDED.assigned_date,
+           is_active = EXCLUDED.is_active`,
+        [assign.id, assign.managerId, assign.farmId, assign.assignedDate, assign.isActive]
+      );
+    }
+
+    // 6. Synchronize Updates
+    for (const up of db.updates) {
+      await client.query(
+        `INSERT INTO updates (id, farm_id, posted_by, posted_by_name, title, body, update_type, target_investor_ids, is_published, created_at, photos)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO UPDATE SET
+           farm_id = EXCLUDED.farm_id,
+           posted_by = EXCLUDED.posted_by,
+           posted_by_name = EXCLUDED.posted_by_name,
+           title = EXCLUDED.title,
+           body = EXCLUDED.body,
+           update_type = EXCLUDED.update_type,
+           target_investor_ids = EXCLUDED.target_investor_ids,
+           is_published = EXCLUDED.is_published,
+           created_at = EXCLUDED.created_at,
+           photos = EXCLUDED.photos`,
+        [up.id, up.farmId, up.postedBy, up.postedByName, up.title, up.body, up.updateType, JSON.stringify(up.targetInvestorIds || []), up.isPublished, up.createdAt, JSON.stringify(up.photos || [])]
+      );
+    }
+
+    // 7. Synchronize Documents
+    for (const doc of db.documents) {
+      await client.query(
+        `INSERT INTO documents (id, farm_id, plot_id, uploaded_by, uploaded_by_name, title, file_url, file_name, category, visibility, description, uploaded_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         ON CONFLICT (id) DO UPDATE SET
+           farm_id = EXCLUDED.farm_id,
+           plot_id = EXCLUDED.plot_id,
+           uploaded_by = EXCLUDED.uploaded_by,
+           uploaded_by_name = EXCLUDED.uploaded_by_name,
+           title = EXCLUDED.title,
+           file_url = EXCLUDED.file_url,
+           file_name = EXCLUDED.file_name,
+           category = EXCLUDED.category,
+           visibility = EXCLUDED.visibility,
+           description = EXCLUDED.description,
+           uploaded_at = EXCLUDED.uploaded_at`,
+        [doc.id, doc.farmId, doc.plotId || null, doc.uploadedBy, doc.uploadedByName, doc.title, doc.fileUrl, doc.fileName, doc.category, doc.visibility, doc.description || null, doc.uploadedAt]
+      );
+    }
+
+    // 8. Synchronize Financials
+    for (const fin of db.financials) {
+      await client.query(
+        `INSERT INTO financials (id, plot_id, uploaded_by, period, year, roi_percentage, payout_amount, payout_date, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO UPDATE SET
+           plot_id = EXCLUDED.plot_id,
+           uploaded_by = EXCLUDED.uploaded_by,
+           period = EXCLUDED.period,
+           year = EXCLUDED.year,
+           roi_percentage = EXCLUDED.roi_percentage,
+           payout_amount = EXCLUDED.payout_amount,
+           payout_date = EXCLUDED.payout_date,
+           status = EXCLUDED.status,
+           notes = EXCLUDED.notes`,
+        [fin.id, fin.plotId, fin.uploadedBy, fin.period, fin.year, fin.roiPercentage, fin.payoutAmount, fin.payoutDate, fin.status, fin.notes || null]
+      );
+    }
+
+    // 9. Synchronize Simulated Emails
+    for (const email of db.simulatedEmails) {
+      await client.query(
+        `INSERT INTO simulated_emails (id, to_address, subject, body, html_body, sent_at, category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO UPDATE SET
+           to_address = EXCLUDED.to_address,
+           subject = EXCLUDED.subject,
+           body = EXCLUDED.body,
+           html_body = EXCLUDED.html_body,
+           sent_at = EXCLUDED.sent_at,
+           category = EXCLUDED.category`,
+        [email.id, email.to, email.subject, email.body, email.htmlBody, email.sentAt, email.category]
+      );
+    }
+
+    await client.query('COMMIT');
+    console.log('✅ Synchronized memory database state to PostgreSQL successfully.');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('❌ Failed to sync memory database to PostgreSQL:', err);
+  } finally {
+    client.release();
+  }
+}
+
+// Fallback logic for reading local db.json
+function loadLocalJsonDb() {
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      console.log('✅ Local JSON Database loaded successfully from file');
+    } catch (e) {
+      db = getInitialDb();
+      fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+    }
+  } else {
     db = getInitialDb();
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   }
-} else {
-  db = getInitialDb();
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
+
+// Main integration initialization for PostgreSQL
+async function initPostgres() {
+  if (!process.env.DATABASE_URL) {
+    console.log('⚠️ DATABASE_URL not set. Running in local JSON file mode.');
+    loadLocalJsonDb();
+    return;
+  }
+
+  try {
+    console.log('🔌 Connecting to PostgreSQL database...');
+    pgPool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    });
+
+    // Verify connections
+    const client = await pgPool.connect();
+    console.log('🚀 Connected to PostgreSQL successfully!');
+    client.release();
+    usePostgres = true;
+
+    // Build the schema if not existing
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(50) PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        phone VARCHAR(50),
+        email VARCHAR(100) NOT NULL,
+        name VARCHAR(100) NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS farms (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        location VARCHAR(100) NOT NULL,
+        state VARCHAR(100) NOT NULL,
+        total_plots INT DEFAULT 0,
+        total_hectares DOUBLE PRECISION DEFAULT 0.0,
+        description TEXT,
+        cover_image TEXT,
+        date_established VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE
+      );
+
+      CREATE TABLE IF NOT EXISTS plots (
+        id VARCHAR(50) PRIMARY KEY,
+        farm_id VARCHAR(50) NOT NULL,
+        plot_number VARCHAR(50) NOT NULL,
+        size_hectares DOUBLE PRECISION NOT NULL,
+        crop_type VARCHAR(100) NOT NULL,
+        status VARCHAR(50) NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS investor_plots (
+        id VARCHAR(50) PRIMARY KEY,
+        investor_id VARCHAR(50) NOT NULL,
+        plot_id VARCHAR(50) NOT NULL,
+        investment_amount DOUBLE PRECISION NOT NULL,
+        ownership_percentage DOUBLE PRECISION DEFAULT 100,
+        start_date VARCHAR(50) NOT NULL,
+        contract_ref VARCHAR(100),
+        is_active BOOLEAN DEFAULT TRUE
+      );
+
+      CREATE TABLE IF NOT EXISTS assignments (
+        id VARCHAR(50) PRIMARY KEY,
+        manager_id VARCHAR(50) NOT NULL,
+        farm_id VARCHAR(50) NOT NULL,
+        assigned_date VARCHAR(50) NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE
+      );
+
+      CREATE TABLE IF NOT EXISTS updates (
+        id VARCHAR(50) PRIMARY KEY,
+        farm_id VARCHAR(50) NOT NULL,
+        posted_by VARCHAR(50) NOT NULL,
+        posted_by_name VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        update_type VARCHAR(50) NOT NULL,
+        target_investor_ids JSONB DEFAULT '[]',
+        is_published BOOLEAN DEFAULT TRUE,
+        created_at VARCHAR(100) NOT NULL,
+        photos JSONB DEFAULT '[]'
+      );
+
+      CREATE TABLE IF NOT EXISTS documents (
+        id VARCHAR(50) PRIMARY KEY,
+        farm_id VARCHAR(50) NOT NULL,
+        plot_id VARCHAR(50),
+        uploaded_by VARCHAR(50) NOT NULL,
+        uploaded_by_name VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        file_url TEXT NOT NULL,
+        file_name VARCHAR(255) NOT NULL,
+        category VARCHAR(50) NOT NULL,
+        visibility VARCHAR(50) NOT NULL,
+        description TEXT,
+        uploaded_at VARCHAR(100) NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS financials (
+        id VARCHAR(50) PRIMARY KEY,
+        plot_id VARCHAR(50) NOT NULL,
+        uploaded_by VARCHAR(50) NOT NULL,
+        period VARCHAR(50) NOT NULL,
+        year INT NOT NULL,
+        roi_percentage DOUBLE PRECISION DEFAULT 0.0,
+        payout_amount DOUBLE PRECISION DEFAULT 0.0,
+        payout_date VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        notes TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS simulated_emails (
+        id VARCHAR(50) PRIMARY KEY,
+        to_address VARCHAR(100) NOT NULL,
+        subject VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        html_body TEXT NOT NULL,
+        sent_at VARCHAR(100) NOT NULL,
+        category VARCHAR(100) NOT NULL
+      );
+    `);
+
+    // Run empty-check for seeding
+    const userCountResult = await pgPool.query('SELECT COUNT(*) FROM users;');
+    const userCount = parseInt(userCountResult.rows[0].count);
+
+    if (userCount === 0) {
+      console.log('🌱 PostgreSQL database is empty. Seeding from fallback values...');
+      let initialData: DatabaseSchema;
+      try {
+        if (fs.existsSync(DB_FILE)) {
+          initialData = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        } else {
+          initialData = getInitialDb();
+        }
+      } catch (err) {
+        initialData = getInitialDb();
+      }
+
+      // Seed core DB structures
+      db = initialData;
+      await saveDbToPostgres();
+      console.log('✅ PostgreSQL seeding completed successfully!');
+    }
+
+    // Retrieve database state
+    console.log('🔄 Loading persisted state from PostgreSQL tables...');
+    const usersRes = await pgPool.query('SELECT * FROM users;');
+    const farmsRes = await pgPool.query('SELECT * FROM farms;');
+    const plotsRes = await pgPool.query('SELECT * FROM plots;');
+    const investorPlotsRes = await pgPool.query('SELECT * FROM investor_plots;');
+    const assignmentsRes = await pgPool.query('SELECT * FROM assignments;');
+    const updatesRes = await pgPool.query('SELECT * FROM updates;');
+    const documentsRes = await pgPool.query('SELECT * FROM documents;');
+    const financialsRes = await pgPool.query('SELECT * FROM financials;');
+    const emailsRes = await pgPool.query('SELECT * FROM simulated_emails ORDER BY sent_at DESC;');
+
+    db = {
+      users: usersRes.rows.map(mapUserFromDb),
+      farms: farmsRes.rows.map(mapFarmFromDb),
+      plots: plotsRes.rows.map(mapPlotFromDb),
+      investorPlots: investorPlotsRes.rows.map(mapInvestorPlotFromDb),
+      assignments: assignmentsRes.rows.map(mapAssignmentFromDb),
+      updates: updatesRes.rows.map(mapUpdateFromDb),
+      documents: documentsRes.rows.map(mapDocumentFromDb),
+      financials: financialsRes.rows.map(mapFinancialFromDb),
+      simulatedEmails: emailsRes.rows.map(mapSimulatedEmailFromDb)
+    };
+
+    console.log(`✅ Loaded ${db.users.length} users, ${db.farms.length} estates, ${db.plots.length} plots from PostgreSQL!`);
+  } catch (err) {
+    console.error('❌ Failed to initialize PostgreSQL connection:', err);
+    console.log('⚠️ Running in backup Local JSON DB mode.');
+    usePostgres = false;
+    loadLocalJsonDb();
+  }
 }
 
 function saveDb() {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  // Always maintain an active local JSON backup file
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error('❌ Failed to save local file-based DB copy:', err);
+  }
+
+  // Push updates to PostgreSQL if activated
+  if (usePostgres && pgPool) {
+    saveDbToPostgres().catch(err => {
+      console.error('❌ Failed to synchronize database changes with PostgreSQL:', err);
+    });
+  }
 }
 
 // Simulated real-time triggers for notification emails
@@ -1272,18 +1824,54 @@ app.get('/api/emails/outbox', requireAuth, (req, res) => {
 });
 
 // Reset command (simulates seed_demo)
-app.post('/api/admin/reset-db', requireAuth, (req, res) => {
+app.post('/api/admin/reset-db', requireAuth, async (req, res) => {
   const user = (req as any).user as User;
   if (user.role !== UserRole.ADMIN) {
     return res.status(403).json({ error: 'Admin authentication required.' });
+  }
+  if (usePostgres) {
+    await resetPostgresDb();
   }
   db = getInitialDb();
   saveDb();
   res.json({ message: 'Database successfully restored to original seed demo values.' });
 });
 
+// Clean Slate command (Wipe demo data, transition to live/production)
+app.post('/api/admin/clean-slate', requireAuth, async (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin authentication required.' });
+  }
+
+  try {
+    if (usePostgres) {
+      await clearAllButAdminPostgres();
+    }
+
+    // Filter memory db state
+    db.users = db.users.filter(u => u.role === UserRole.ADMIN);
+    db.farms = [];
+    db.plots = [];
+    db.investorPlots = [];
+    db.assignments = [];
+    db.updates = [];
+    db.documents = [];
+    db.financials = [];
+    db.simulatedEmails = [];
+
+    saveDb();
+    res.json({ message: 'Database successfully migrated to clean slate. Ready for live production data!' });
+  } catch (err: any) {
+    console.error('❌ Failed to transition database to clean slate:', err);
+    res.status(500).json({ error: 'Could not perform clean slate operations.' });
+  }
+});
+
 // INTEGRATE VITE NODE DEV SERVER MIDDLEWARE
 async function startServer() {
+  await initPostgres();
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
