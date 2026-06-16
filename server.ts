@@ -1,0 +1,1189 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
+import { v2 as cloudinary } from 'cloudinary';
+import nodemailer from 'nodemailer';
+import { createServer as createViteServer } from 'vite';
+import {
+  User,
+  UserRole,
+  Farm,
+  FarmPlot,
+  InvestorPlot,
+  FarmManagerAssignment,
+  FarmUpdate,
+  Document,
+  DocumentCategory,
+  DocumentVisibility,
+  FinancialSummary,
+  SimulatedEmail,
+  PlotStatus,
+  UpdateType,
+  FinancialStatus
+} from './src/types';
+
+// Establish folders
+const DATA_DIR = path.join(process.cwd(), 'data');
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Multer storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
+
+// Initialize express
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+const PORT = 3000;
+
+// Setup lazy Cloudinary configuration
+let isCloudinaryConfigured = false;
+function getCloudinary() {
+  if (!isCloudinaryConfigured && process.env.CLOUDINARY_URL) {
+    try {
+      cloudinary.config({
+        cloudinary_url: process.env.CLOUDINARY_URL
+      });
+      isCloudinaryConfigured = true;
+      console.log('✅ Cloudinary connected successfully via CLOUDINARY_URL');
+    } catch (e) {
+      console.error('❌ Cloudinary configuration failed:', e);
+    }
+  }
+  return cloudinary;
+}
+
+// Setup lazy SMTP email configuration
+let mailTransporter: any = null;
+function getMailTransporter() {
+  if (!mailTransporter && process.env.EMAIL_HOST) {
+    try {
+      mailTransporter = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST,
+        port: parseInt(process.env.EMAIL_PORT || '587'),
+        secure: process.env.EMAIL_USE_TLS === 'false' ? false : true,
+        auth: {
+          user: process.env.EMAIL_HOST_USER,
+          pass: process.env.EMAIL_HOST_PASSWORD
+        }
+      });
+      console.log('✅ SMTP Mail Transporter configured successfully');
+    } catch (e) {
+      console.error('❌ SMTP configuration failed:', e);
+    }
+  }
+  return mailTransporter;
+}
+
+// Database Scheme
+interface DatabaseSchema {
+  users: User[];
+  farms: Farm[];
+  plots: FarmPlot[];
+  investorPlots: InvestorPlot[];
+  assignments: FarmManagerAssignment[];
+  updates: FarmUpdate[];
+  documents: Document[];
+  financials: FinancialSummary[];
+  simulatedEmails: SimulatedEmail[];
+}
+
+// Seed helper
+function getInitialDb(): DatabaseSchema {
+  return {
+    users: [
+      {
+        id: 'user-admin',
+        username: 'admin',
+        role: UserRole.ADMIN,
+        phone: '+2348030012211',
+        email: 'admin@adubiaro.com',
+        name: 'Basit Ajibade'
+      },
+      {
+        id: 'user-manager1',
+        username: 'manager1',
+        role: UserRole.FARM_MANAGER,
+        phone: '+2348052219088',
+        email: 'wale@adubiaro.com',
+        name: 'Wale Adeleke'
+      },
+      {
+        id: 'user-investor1',
+        username: 'investor1',
+        role: UserRole.INVESTOR,
+        phone: '+2347012345678',
+        email: 'investor1@example.com',
+        name: 'Olumide Benson'
+      },
+      {
+        id: 'user-investor2',
+        username: 'investor2',
+        role: UserRole.INVESTOR,
+        phone: '+2348123456789',
+        email: 'investor2@example.com',
+        name: 'Fatima Yar-Adua'
+      }
+    ],
+    farms: [
+      {
+        id: 'farm-01',
+        name: 'Adubiaro Oil Palm Estate',
+        location: 'Ikere-Ekiti',
+        state: 'Ekiti State',
+        totalPlots: 3,
+        totalHectares: 5.3,
+        description: 'Premier oil palm estate in Southwest Nigeria. Featuring advanced high-yield tenera hybrid palm trees supported by solar-powered drip irrigation, premium nursery supervision, and state of the art processing milling.',
+        coverImage: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=800',
+        dateEstablished: '2024-03-15',
+        isActive: true
+      }
+    ],
+    plots: [
+      {
+        id: 'plot-01',
+        farmId: 'farm-01',
+        plotNumber: 'A-01',
+        sizeHectares: 1.5,
+        cropType: 'Oil Palm (Tenera Hybrid)',
+        status: PlotStatus.ACTIVE
+      },
+      {
+        id: 'plot-02',
+        farmId: 'farm-01',
+        plotNumber: 'A-02',
+        sizeHectares: 2.0,
+        cropType: 'Oil Palm (Tenera Hybrid)',
+        status: PlotStatus.HARVESTING
+      },
+      {
+        id: 'plot-03',
+        farmId: 'farm-01',
+        plotNumber: 'B-01',
+        sizeHectares: 1.8,
+        cropType: 'Oil Palm (Tenera Hybrid)',
+        status: PlotStatus.DORMANT
+      }
+    ],
+    investorPlots: [
+      {
+        id: 'invplot-01',
+        investorId: 'user-investor1',
+        plotId: 'plot-01',
+        investmentAmount: 25000,
+        ownershipPercentage: 100,
+        startDate: '2025-06-01',
+        contractRef: 'CON-2025-01',
+        isActive: true
+      },
+      {
+        id: 'invplot-02',
+        investorId: 'user-investor1',
+        plotId: 'plot-02',
+        investmentAmount: 35000,
+        ownershipPercentage: 100,
+        startDate: '2025-08-12',
+        contractRef: 'CON-2025-02',
+        isActive: true
+      },
+      {
+        id: 'invplot-03',
+        investorId: 'user-investor2',
+        plotId: 'plot-03',
+        investmentAmount: 28000,
+        ownershipPercentage: 100,
+        startDate: '2026-01-05',
+        contractRef: 'CON-2026-01',
+        isActive: true
+      }
+    ],
+    assignments: [
+      {
+        id: 'assign-01',
+        managerId: 'user-manager1',
+        farmId: 'farm-01',
+        assignedDate: '2024-04-01',
+        isActive: true
+      }
+    ],
+    updates: [
+      {
+        id: 'update-01',
+        farmId: 'farm-01',
+        postedBy: 'user-manager1',
+        postedByName: 'Wale Adeleke',
+        title: 'Growth Report — Q1 Progress',
+        body: 'We are pleased to report excellent growth across all palm cohorts. Soil testing confirms optimal nutrient retention, and our organic fertilization regimen is on schedule. Rain levels have been supportive.',
+        updateType: UpdateType.GROWTH,
+        isPublished: true,
+        createdAt: '2026-06-01T10:00:00Z',
+        photos: [
+          {
+            id: 'uphoto-1',
+            updateId: 'update-01',
+            image: 'https://images.unsplash.com/photo-1516253593875-bd7ba052fbc5?auto=format&fit=crop&q=80&w=600',
+            caption: 'Nursery seedlings transplanting'
+          }
+        ]
+      },
+      {
+        id: 'update-02',
+        farmId: 'farm-01',
+        postedBy: 'user-manager1',
+        postedByName: 'Wale Adeleke',
+        title: 'Harvest Notice — Section A',
+        body: 'Harvesting activities have commenced for Block A. Our field workers are harvesting fresh fruit bunches (FFB) yielding an average of 4.2 tons per hectare. Crushing operations have also kicked off at the processing center.',
+        updateType: UpdateType.HARVEST,
+        isPublished: true,
+        createdAt: '2026-06-10T14:30:00Z',
+        photos: [
+          {
+            id: 'uphoto-2',
+            updateId: 'update-02',
+            image: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=600',
+            caption: 'FFB loading'
+          }
+        ]
+      },
+      {
+        id: 'update-03',
+        farmId: 'farm-01',
+        postedBy: 'user-admin',
+        postedByName: 'Basit Ajibade',
+        title: 'Infrastructure Milestone — Irrigation Upgrade',
+        body: 'A major milestone has been completed. The solar-powered drip irrigation system is now fully operational across Block B. This will safeguard crop yield integrity during dry spells and dry seasons.',
+        updateType: UpdateType.MILESTONE,
+        isPublished: true,
+        createdAt: '2026-06-14T09:15:00Z',
+        photos: []
+      }
+    ],
+    documents: [
+      {
+        id: 'doc-01',
+        farmId: 'farm-01',
+        uploadedBy: 'user-admin',
+        uploadedByName: 'Basit Ajibade',
+        title: 'Environmental Impact Assessment Certificate',
+        fileUrl: '#eia-certificate',
+        fileName: 'EIA_Certificate_Adubiaro_2024.pdf',
+        category: DocumentCategory.CERTIFICATE,
+        visibility: DocumentVisibility.FARM,
+        description: 'Federal Ministry of Environment clearance certificate demonstrating sustainable ecological practices for Adubiaro Estates.',
+        uploadedAt: '2024-05-10T11:00:00Z'
+      },
+      {
+        id: 'doc-02',
+        farmId: 'farm-01',
+        plotId: 'plot-01',
+        uploadedBy: 'user-admin',
+        uploadedByName: 'Basit Ajibade',
+        title: 'Deed of Farming Contract — Plot A-01',
+        fileUrl: '#deed-a-01',
+        fileName: 'Contract_A-01_Benson.pdf',
+        category: DocumentCategory.CONTRACT,
+        visibility: DocumentVisibility.PLOT,
+        description: 'Official verified purchase deed and investment contract for Block A-01 owned by Olumide Benson.',
+        uploadedAt: '2025-06-02T16:00:00Z'
+      }
+    ],
+    financials: [
+      {
+        id: 'fin-01',
+        plotId: 'plot-01',
+        uploadedBy: 'user-admin',
+        period: 'Q1',
+        year: 2026,
+        roiPercentage: 12.5,
+        payoutAmount: 3125,
+        payoutDate: '2026-04-15',
+        status: FinancialStatus.PAID,
+        notes: 'First quarter yield payout successfully transferred.'
+      },
+      {
+        id: 'fin-02',
+        plotId: 'plot-02',
+        uploadedBy: 'user-admin',
+        period: 'Q2',
+        year: 2026,
+        roiPercentage: 8.2,
+        payoutAmount: 2870,
+        payoutDate: '2026-07-15',
+        status: FinancialStatus.PENDING,
+        notes: 'Second quarter yield forecast under active auditing.'
+      },
+      {
+        id: 'fin-03',
+        plotId: 'plot-03',
+        uploadedBy: 'user-admin',
+        period: 'Q2',
+        year: 2026,
+        roiPercentage: 0.0,
+        payoutAmount: 0,
+        payoutDate: '2026-07-15',
+        status: FinancialStatus.PENDING,
+        notes: 'Plot under dormant soil rejuvenation cycle. No payout due.'
+      }
+    ],
+    simulatedEmails: [
+      {
+        id: 'email-01',
+        to: 'investor1@example.com',
+        subject: 'Welcome to Adubiaro Farm Estates Portal',
+        body: 'Welcome Olumide Benson! Your account is set up with username investor1. Use temporary password Investor@1234.',
+        htmlBody: `<h3>Welcome to Adubiaro Farm Estates Portal</h3><p>Dear Olumide Benson,</p><p>We are delighted to welcome you to the Adubiaro Farm Estate family!</p><p>Your private investor dashboard is now ready. Use the credentials below to log in and track your high-performance oil palm investments:</p><ul><li><b>Username:</b> investor1</li><li><b>Temporary Password:</b> Investor@1234</li><li><b>Portal URL:</b> <a href="#">Login Here</a></li></ul><p>Our dedicated support desk is available at support@adubiaro.com if you require assistance.</p><p>Warm regards,<br/>Adubiaro Executive Team</p>`,
+        sentAt: '2025-06-01T08:00:00Z',
+        category: 'Welcome'
+      }
+    ]
+  };
+}
+
+let db: DatabaseSchema;
+if (fs.existsSync(DB_FILE)) {
+  try {
+    db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    console.log('✅ Local Database loaded successfully from file');
+  } catch (e) {
+    db = getInitialDb();
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  }
+} else {
+  db = getInitialDb();
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
+
+function saveDb() {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
+
+// Simulated real-time triggers for notification emails
+async function dispatchEmail(to: string, subject: string, textBody: string, htmlBody: string, category: string) {
+  // 1. Appends to internal simulated log
+  const newEmail: SimulatedEmail = {
+    id: 'email-' + Date.now().toString(),
+    to,
+    subject,
+    body: textBody,
+    htmlBody,
+    sentAt: new Date().toISOString(),
+    category
+  };
+  db.simulatedEmails.unshift(newEmail);
+  saveDb();
+
+  // 2. Tries lazy real SMTP send
+  const transporter = getMailTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({
+        from: process.env.DEFAULT_FROM_EMAIL || 'Adubiaro Farms <noreply@adubiaro.com>',
+        to,
+        subject,
+        text: textBody,
+        html: htmlBody
+      });
+      console.log(`📧 Fully routed REAL SMTP Email to ${to}: ${subject}`);
+    } catch (e) {
+      console.error('📧 SMTP Send issue (skipping, logged in simulated outbox):', e);
+    }
+  } else {
+    console.log(`📧 Simulated Email recorded in outbox to ${to}: ${subject}`);
+  }
+}
+
+// AUTHENTICATION MIDDLEWARE
+function getAuthenticatedUser(req: express.Request): User | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer mock-token-')) {
+    return null;
+  }
+  const username = authHeader.replace('Bearer mock-token-', '').trim();
+  const foundUser = db.users.find(u => u.username === username);
+  return foundUser || null;
+}
+
+function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthenticated' });
+  }
+  // Attach user to req as custom property
+  (req as any).user = user;
+  next();
+}
+
+// API ROUTING
+
+// Auth - Login
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  // Accept standard demo passwords
+  const user = db.users.find(u => u.username === username);
+  if (!user) {
+    return res.status(400).json({ error: 'Invalid login credentials' });
+  }
+
+  let isMatch = false;
+  if (user.role === UserRole.ADMIN && password === 'Admin@1234') isMatch = true;
+  if (user.role === UserRole.FARM_MANAGER && password === 'Manager@1234') isMatch = true;
+  if (user.role === UserRole.INVESTOR && password === 'Investor@1234') isMatch = true;
+
+  if (!isMatch) {
+    return res.status(400).json({ error: 'Invalid login credentials' });
+  }
+
+  const token = `mock-token-${user.username}`;
+  res.json({ token, user });
+});
+
+// Auth - Current User Status
+app.get('/api/user/me', requireAuth, (req, res) => {
+  res.json({ user: (req as any).user });
+});
+
+// Admin System Stats Dashboard
+app.get('/api/admin/system-stats', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+
+  const totalInvestors = db.users.filter(u => u.role === UserRole.INVESTOR).length;
+  const totalManagers = db.users.filter(u => u.role === UserRole.FARM_MANAGER).length;
+  const totalFarms = db.farms.length;
+  const totalPlotsCount = db.plots.length;
+  
+  // Calculate total investments
+  const totalInvestment = db.investorPlots.reduce((sum, p) => sum + p.investmentAmount, 0);
+  
+  // Calculate total paid and pending payouts
+  let totalPaidPayouts = 0;
+  let totalPendingPayouts = 0;
+  db.financials.forEach(fin => {
+    if (fin.status === FinancialStatus.PAID) {
+      totalPaidPayouts += fin.payoutAmount;
+    } else if (fin.status === FinancialStatus.PENDING) {
+      totalPendingPayouts += fin.payoutAmount;
+    }
+  });
+
+  res.json({
+    totalInvestors,
+    totalManagers,
+    totalFarms,
+    totalPlotsCount,
+    totalInvestment,
+    totalPaidPayouts,
+    totalPendingPayouts
+  });
+});
+
+// List Farms (Filtered according to roles)
+app.get('/api/farms', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+
+  if (user.role === UserRole.ADMIN) {
+    return res.json(db.farms);
+  }
+
+  if (user.role === UserRole.FARM_MANAGER) {
+    // Get farms assigned to this manager
+    const assignedFarmIds = db.assignments
+      .filter(a => a.managerId === user.id && a.isActive)
+      .map(a => a.farmId);
+    const assignedFarms = db.farms.filter(f => assignedFarmIds.includes(f.id));
+    return res.json(assignedFarms);
+  }
+
+  if (user.role === UserRole.INVESTOR) {
+    // Get farms where investor owns plots
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    const ownedPlotFarms = db.plots.filter(p => plotIds.includes(p.id)).map(p => p.farmId);
+    const ownedFarms = db.farms.filter(f => ownedPlotFarms.includes(f.id));
+    return res.json(ownedFarms);
+  }
+
+  res.json([]);
+});
+
+// Single Farm Details API (with Updates, Documents, Plots checked cleanly)
+app.get('/api/farms/:id', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  const farmId = req.params.id;
+
+  const farm = db.farms.find(f => f.id === farmId);
+  if (!farm) {
+    return res.status(404).json({ error: 'Farm not found' });
+  }
+
+  // 1. Roles access boundary check
+  let accessAllowed = false;
+  let assignedAsManager = false;
+
+  if (user.role === UserRole.ADMIN) {
+    accessAllowed = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    assignedAsManager = db.assignments.some(
+      a => a.managerId === user.id && a.farmId === farmId && a.isActive
+    );
+    if (assignedAsManager) {
+      accessAllowed = true;
+    }
+  } else if (user.role === UserRole.INVESTOR) {
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    const ownsPlotInFarm = db.plots.some(p => p.farmId === farmId && plotIds.includes(p.id));
+    if (ownsPlotInFarm) {
+      accessAllowed = true;
+    }
+  }
+
+  if (!accessAllowed) {
+    return res.status(403).json({ error: 'Access denied to this farm estate' });
+  }
+
+  // 2. Gather plots
+  let plots = db.plots.filter(p => p.farmId === farmId);
+  // If role is investor, format/filter plots so they only see details of their owned plots
+  if (user.role === UserRole.INVESTOR) {
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    plots = plots.filter(p => plotIds.includes(p.id));
+  }
+
+  // 3. Gather updates
+  const updates = db.updates.filter(u => u.farmId === farmId && u.isPublished);
+
+  // 4. Gather documents
+  let documents = db.documents.filter(d => d.farmId === farmId);
+  if (user.role === UserRole.FARM_MANAGER) {
+    // Farm managers can see documents in general, but since they shouldn't see sensitive financials, they filter those categories
+    documents = documents.filter(d => d.category !== DocumentCategory.FINANCIAL);
+  } else if (user.role === UserRole.INVESTOR) {
+    // Investors can see farm-wide, or specific plot documents matching their holdings
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    documents = documents.filter(
+      d => d.visibility === DocumentVisibility.FARM || (d.plotId && plotIds.includes(d.plotId))
+    );
+  }
+
+  // Gather plot investment details for investors / admin
+  let investorHoldings: any[] = [];
+  if (user.role === UserRole.INVESTOR) {
+    const holdings = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    investorHoldings = holdings.map(h => {
+      const p = db.plots.find(plot => plot.id === h.plotId);
+      return {
+        ...h,
+        plotNumber: p?.plotNumber,
+        cropType: p?.cropType,
+        sizeHectares: p?.sizeHectares
+      };
+    });
+  } else if (user.role === UserRole.ADMIN) {
+    // Admin sees all plot ownerships
+    const holdings = db.investorPlots.filter(ip => ip.isActive);
+    investorHoldings = holdings.map(h => {
+      const p = db.plots.find(plot => plot.id === h.plotId);
+      const investorName = db.users.find(u => u.id === h.investorId)?.name || 'Unknown';
+      return {
+        ...h,
+        plotNumber: p?.plotNumber,
+        cropType: p?.cropType,
+        investorName
+      };
+    });
+  }
+
+  res.json({
+    farm,
+    plots,
+    updates,
+    documents,
+    investorHoldings
+  });
+});
+
+// Post farm update (Admin/Manager assigned only)
+app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), async (req, res) => {
+  const user = (req as any).user as User;
+  const farmId = req.params.id;
+  const { title, body, updateType } = req.body;
+
+  const farm = db.farms.find(f => f.id === farmId);
+  if (!farm) {
+    return res.status(404).json({ error: 'Farm not found' });
+  }
+
+  let authorized = false;
+  if (user.role === UserRole.ADMIN) {
+    authorized = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    authorized = db.assignments.some(
+      a => a.managerId === user.id && a.farmId === farmId && a.isActive
+    );
+  }
+
+  if (!authorized) {
+    return res.status(403).json({ error: 'Not authorized to post updates for this farm' });
+  }
+
+  const uploadedFiles = (req.files as Express.Multer.File[]) || [];
+  const updatePhotosList: any[] = [];
+  const updateId = 'update-' + Date.now();
+
+  const cld = getCloudinary();
+  for (let i = 0; i < uploadedFiles.length; i++) {
+    const file = uploadedFiles[i];
+    let fileUrl = `/uploads/${file.filename}`;
+
+    if (process.env.CLOUDINARY_URL) {
+      try {
+        const cldRes = await cld.uploader.upload(file.path, {
+          folder: 'farm_estate_updates'
+        });
+        fileUrl = cldRes.secure_url;
+        // Clean local temp file
+        fs.unlinkSync(file.path);
+      } catch (e) {
+        console.error('Cloudinary upload failure, using local route instead', e);
+      }
+    }
+
+    updatePhotosList.push({
+      id: `uphoto-${updateId}-${i}`,
+      updateId,
+      image: fileUrl,
+      caption: req.body.captions?.[i] || ''
+    });
+  }
+
+  const newUpdate: FarmUpdate = {
+    id: updateId,
+    farmId,
+    postedBy: user.id,
+    postedByName: user.name,
+    title,
+    body,
+    updateType: (updateType as UpdateType) || UpdateType.GENERAL,
+    isPublished: true,
+    createdAt: new Date().toISOString(),
+    photos: updatePhotosList
+  };
+
+  db.updates.unshift(newUpdate);
+  saveDb();
+
+  // EMAIL TRIGGER 1: New farm update posted → email all investors who own plots in that farm
+  const investorPlotsOnFarm = db.plots.filter(p => p.farmId === farmId);
+  const investorIdsOnFarm = db.investorPlots
+    .filter(ip => ip.isActive && investorPlotsOnFarm.some(p => p.id === ip.plotId))
+    .map(ip => ip.investorId);
+  
+  const distinctInvestors = db.users.filter(u => u.role === UserRole.INVESTOR && investorIdsOnFarm.includes(u.id));
+
+  // Dispatch emails asynchronously
+  distinctInvestors.forEach(investor => {
+    dispatchEmail(
+      investor.email,
+      `New Update: ${farm.name} — ${newUpdate.title}`,
+      `Hello ${investor.name},\n\nA new farm update has been posted:\nType: ${newUpdate.updateType}\nDate: ${new Date(newUpdate.createdAt).toLocaleDateString()}\n\nSummary:\n${newUpdate.body.substring(0, 200)}...\n\nPlease log in to the portal to view full photographs and records details.`,
+      `<h3>New Update Released on ${farm.name}</h3>
+       <p>Dear ${investor.name},</p>
+       <p>A new estate chronicle has been added directly from the field:</p>
+       <table style="padding: 10px; background-color: #F8F4EC; border-radius: 6px; width: 100%;">
+         <tr><td><b>Update:</b></td><td>${newUpdate.title}</td></tr>
+         <tr><td><b>Category:</b></td><td><span style="background-color:#52B788;color:white;padding:3px 6px;border-radius:4px;font-size:12px;">${newUpdate.updateType.toUpperCase()}</span></td></tr>
+         <tr><td><b>Posted By:</b></td><td>${newUpdate.postedByName}</td></tr>
+         <tr><td><b>Date:</b></td><td>${new Date(newUpdate.createdAt).toDateString()}</td></tr>
+       </table>
+       <p style="margin-top:20px; font-style: italic; border-left: 3px solid #1B4332; padding-left: 10px;">
+         "${newUpdate.body.substring(0, 250)}..."
+       </p>
+       <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Investor Portal</a></p>`,
+      'Farm Update'
+    );
+  });
+
+  res.status(201).json(newUpdate);
+});
+
+// Upload farm Document (Admin/Manager assigned only)
+app.post('/api/documents/farm/:id/upload', requireAuth, upload.single('file'), async (req, res) => {
+  const user = (req as any).user as User;
+  const farmId = req.params.id;
+  const { title, category, visibility, description, plotId } = req.body;
+
+  const farm = db.farms.find(f => f.id === farmId);
+  if (!farm) {
+    return res.status(404).json({ error: 'Farm not found' });
+  }
+
+  let authorized = false;
+  if (user.role === UserRole.ADMIN) {
+    authorized = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    authorized = db.assignments.some(
+      a => a.managerId === user.id && a.farmId === farmId && a.isActive
+    );
+  }
+
+  if (!authorized) {
+    return res.status(403).json({ error: 'Not authorized to upload files for this farm' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ error: 'Please attach a valid file' });
+  }
+
+  let fileUrl = `/uploads/${req.file.filename}`;
+  const fileName = req.file.originalname;
+
+  const cld = getCloudinary();
+  if (process.env.CLOUDINARY_URL) {
+    try {
+      const cldRes = await cld.uploader.upload(req.file.path, {
+        folder: 'farm_estate_documents',
+        resource_type: 'auto'
+      });
+      fileUrl = cldRes.secure_url;
+      fs.unlinkSync(req.file.path);
+    } catch (e) {
+      console.error('Cloudinary document uploaded locally fallback', e);
+    }
+  }
+
+  const newDoc: Document = {
+    id: 'doc-' + Date.now(),
+    farmId,
+    plotId: visibility === DocumentVisibility.PLOT ? plotId : undefined,
+    uploadedBy: user.id,
+    uploadedByName: user.name,
+    title,
+    fileUrl,
+    fileName,
+    category: (category as DocumentCategory) || DocumentCategory.OTHER,
+    visibility: (visibility as DocumentVisibility) || DocumentVisibility.FARM,
+    description: description || '',
+    uploadedAt: new Date().toISOString()
+  };
+
+  db.documents.push(newDoc);
+  saveDb();
+
+  // EMAIL TRIGGER 2: New document uploaded → email affected investors
+  let targetedInvestors: User[] = [];
+  if (newDoc.visibility === DocumentVisibility.PLOT && newDoc.plotId) {
+    const ownerships = db.investorPlots.filter(ip => ip.plotId === newDoc.plotId && ip.isActive);
+    const investorIds = ownerships.map(ip => ip.investorId);
+    targetedInvestors = db.users.filter(u => u.role === UserRole.INVESTOR && investorIds.includes(u.id));
+  } else {
+    // Farm-wide document: email all investors that hold plots on this farm
+    const plotsInFarm = db.plots.filter(p => p.farmId === farmId);
+    const plotIds = plotsInFarm.map(p => p.id);
+    const farmInvestorsIds = db.investorPlots.filter(ip => ip.isActive && plotIds.includes(ip.plotId)).map(ip => ip.investorId);
+    targetedInvestors = db.users.filter(u => u.role === UserRole.INVESTOR && farmInvestorsIds.includes(u.id));
+  }
+
+  targetedInvestors.forEach(investor => {
+    dispatchEmail(
+      investor.email,
+      `New Document Available: ${newDoc.title}`,
+      `Hello ${investor.name},\n\nA new document is available regarding your farmlands:\nTitle: ${newDoc.title}\nCategory: ${newDoc.category}\n\nPlease access the private client portal to download this file securely.`,
+      `<h3>New Secure Document Published</h3>
+       <p>Dear ${investor.name},</p>
+       <p>A new secure regulatory or status document has been uploaded for your attention:</p>
+       <table style="padding: 10px; background-color: #F8F4EC; border-radius: 6px; width: 100%;">
+         <tr><td><b>Title:</b></td><td>${newDoc.title}</td></tr>
+         <tr><td><b>Category:</b></td><td><span style="background-color:#1B4332;color:white;padding:3px 6px;border-radius:4px;font-size:12px;">${newDoc.category.toUpperCase()}</span></td></tr>
+         <tr><td><b>File Name:</b></td><td>${newDoc.fileName}</td></tr>
+         <tr><td><b>Estate:</b></td><td>${farm.name}</td></tr>
+         ${newDoc.plotId ? `<tr><td><b>Target Plot:</b></td><td>${db.plots.find(p => p.id === newDoc.plotId)?.plotNumber || 'N/A'}</td></tr>` : ''}
+       </table>
+       <p>To safely access and download your document, please authenticately log in to the portal.</p>
+       <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Log In & Download Securely</a></p>`,
+      'Document Upload'
+    );
+  });
+
+  res.status(201).json(newDoc);
+});
+
+// Secure Document download check & serving
+app.get('/api/documents/:id/download', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  const docId = req.params.id;
+
+  const doc = db.documents.find(d => d.id === docId);
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found' });
+  }
+
+  // Access check
+  let isAuthorized = false;
+  if (user.role === UserRole.ADMIN) {
+    isAuthorized = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    // Farm managers can see general docs, but not financial categories
+    const managesFarm = db.assignments.some(
+      a => a.managerId === user.id && a.farmId === doc.farmId && a.isActive
+    );
+    if (managesFarm && doc.category !== DocumentCategory.FINANCIAL) {
+      isAuthorized = true;
+    }
+  } else if (user.role === UserRole.INVESTOR) {
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    const ownsPlotInFarm = db.plots.some(p => p.farmId === doc.farmId && plotIds.includes(p.id));
+
+    if (ownsPlotInFarm) {
+      if (doc.visibility === DocumentVisibility.FARM) {
+        isAuthorized = true;
+      } else if (doc.visibility === DocumentVisibility.PLOT && doc.plotId && plotIds.includes(doc.plotId)) {
+        isAuthorized = true;
+      }
+    }
+  }
+
+  if (!isAuthorized) {
+    return res.status(403).json({ error: 'Forbidden — You do not have permission to download this secure document' });
+  }
+
+  // Handle serving the actual file or a mock file stream if they uploaded standard seeds
+  if (doc.fileUrl && doc.fileUrl.startsWith('/uploads/')) {
+    const filePath = path.join(process.cwd(), doc.fileUrl);
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+      return res.sendFile(filePath);
+    }
+  }
+
+  // Fallback stream for built-in or simulated documents
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${doc.fileName}"`);
+  res.send(Buffer.from(`%PDF-1.4\n%-- Adubiaro Secure Server Verification --\n1 0 obj\n<< /Title (${doc.title}) >>\nstream\nSecure investor portal document content.\nUploaded At: ${doc.uploadedAt}\nFile reference: ${doc.id}\nendstream\nendobj\nxref\n0 1\n0000000000 65535 f\ntrailer\n<< /Root 1 0 R >>\n%%EOF`));
+});
+
+// Investor individual portfolio / financial payout summaries
+app.get('/api/financials/my', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+
+  // STRICT RULEBoundary: Farm Manager cannot access financials AT ALL
+  if (user.role === UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Farm managers are restricted from accessing financial dashboards.' });
+  }
+
+  if (user.role === UserRole.ADMIN) {
+    // Admin sees everything
+    const allPayouts = db.financials.map(fin => {
+      const plot = db.plots.find(p => p.id === fin.plotId);
+      const farm = plot ? db.farms.find(f => f.id === plot.farmId) : null;
+      const ownerShip = db.investorPlots.find(ip => ip.plotId === fin.plotId && ip.isActive);
+      const investorName = ownerShip ? (db.users.find(u => u.id === ownerShip.investorId)?.name || 'Unknown') : 'Unassigned';
+      return {
+        ...fin,
+        plotNumber: plot?.plotNumber,
+        cropType: plot?.cropType,
+        farmName: farm?.name,
+        investorName
+      };
+    });
+    return res.json(allPayouts);
+  }
+
+  if (user.role === UserRole.INVESTOR) {
+    // Investor sees only their owned plots' summaries
+    const ownerships = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const ownedPlotIds = ownerships.map(ip => ip.plotId);
+    
+    const summaries = db.financials
+      .filter(f => ownedPlotIds.includes(f.plotId))
+      .map(fin => {
+        const plot = db.plots.find(p => p.id === fin.plotId);
+        const farm = plot ? db.farms.find(f => f.id === plot.farmId) : null;
+        return {
+          ...fin,
+          plotNumber: plot?.plotNumber,
+          cropType: plot?.cropType,
+          farmName: farm?.name
+        };
+      });
+
+    return res.json(summaries);
+  }
+
+  res.json([]);
+});
+
+// Upload/Post Financial record (Admin only)
+app.post('/api/financials/upload', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin credentials required to publish financials' });
+  }
+
+  const { plotId, period, year, roiPercentage, payoutAmount, payoutDate, notes, status } = req.body;
+
+  // Check unique together constraint [plotId + period + year]
+  const alreadyExists = db.financials.some(
+    fin => fin.plotId === plotId && fin.period === period && fin.year === parseInt(year)
+  );
+
+  if (alreadyExists) {
+    return res.status(400).json({ error: `A financial record for Plot, Period ${period}, and Year ${year} already exists.` });
+  }
+
+  const newFin: FinancialSummary = {
+    id: 'fin-' + Date.now(),
+    plotId,
+    uploadedBy: user.id,
+    period,
+    year: parseInt(year),
+    roiPercentage: parseFloat(roiPercentage || '0'),
+    payoutAmount: parseFloat(payoutAmount || '0'),
+    payoutDate: payoutDate || new Date().toISOString().split('T')[0],
+    status: (status as FinancialStatus) || FinancialStatus.PENDING,
+    notes: notes || ''
+  };
+
+  db.financials.push(newFin);
+  saveDb();
+
+  // EMAIL TRIGGER 3: Financial record added → email the specific plot investor
+  const plot = db.plots.find(p => p.id === plotId);
+  const investorPlotSetting = db.investorPlots.find(ip => ip.plotId === plotId && ip.isActive);
+  if (investorPlotSetting) {
+    const investor = db.users.find(u => u.id === investorPlotSetting.investorId && u.role === UserRole.INVESTOR);
+    if (investor) {
+      dispatchEmail(
+        investor.email,
+        `Financial Summary Available: ${newFin.period} ${newFin.year} — Plot ${plot?.plotNumber}`,
+        `Hello ${investor.name},\n\nA financial summary is now available with the following:\nAmount: $${newFin.payoutAmount}\nStatus: ${newFin.status}\nDue Date: ${newFin.payoutDate}\n\nPlease visit the portal to inspect detail metrics or log transaction records.`,
+        `<h3>New Financial Payout Summary Ready</h3>
+         <p>Dear ${investor.name},</p>
+         <p>A payout ledger has been audited and compiled for your property:</p>
+         <table style="padding: 10px; background-color: #F8F4EC; border-radius: 6px; width: 100%;">
+           <tr><td><b>Plot:</b></td><td>${plot?.plotNumber || 'N/A'}</td></tr>
+           <tr><td><b>Billing Period:</b></td><td>${newFin.period} ${newFin.year}</td></tr>
+           <tr><td><b>Audited ROI:</b></td><td>${newFin.roiPercentage}%</td></tr>
+           <tr><td><b>Net Payout:</b></td><td><b>$${newFin.payoutAmount.toLocaleString()}</b></td></tr>
+           <tr><td><b>Payment Status:</b></td><td><span style="background-color:${newFin.status === 'paid' ? '#52B788' : '#D4A017'};color:white;padding:3px 6px;border-radius:4px;font-size:12px;">${newFin.status.toUpperCase()}</span></td></tr>
+           <tr><td><b>payout Scheduled Date:</b></td><td>${newFin.payoutDate}</td></tr>
+         </table>
+         <p>Log in using your secure dashboard credentials to request disbursement or review balance certificates.</p>
+         <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Financial Dashboard</a></p>`,
+        'Financial Addition'
+      );
+    }
+  }
+
+  res.status(201).json(newFin);
+});
+
+// Admin command: Manage user creation (Admin only)
+app.post('/api/users/create', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Restricted to super administrators.' });
+  }
+
+  const { username, name, email, phone, role } = req.body;
+
+  // Unique username validation
+  const existingUser = db.users.find(u => u.username === username);
+  if (existingUser) {
+    return res.status(400).json({ error: 'Username already exists' });
+  }
+
+  const newUserId = 'user-' + Date.now();
+  const createdUser: User = {
+    id: newUserId,
+    username,
+    name,
+    email,
+    phone,
+    role: (role as UserRole) || UserRole.INVESTOR
+  };
+
+  db.users.push(createdUser);
+  saveDb();
+
+  // Set default temporary password for welcome notification
+  let tempPassword = 'User@1234';
+  if (role === UserRole.FARM_MANAGER) tempPassword = 'Manager@1234';
+  if (role === UserRole.INVESTOR) tempPassword = 'Investor@1234';
+  if (role === UserRole.ADMIN) tempPassword = 'Admin@1234';
+
+  // EMAIL TRIGGER 4: New user / investor account created → welcome email
+  dispatchEmail(
+    createdUser.email,
+    'Welcome to Adubiaro Farm Estates Portal',
+    `Hello ${createdUser.name},\n\nYour profile has been provisioned on Adubiaro Estates.\nUsername: ${createdUser.username}\nTemporary Password: ${tempPassword}\n\nPlease click the link to configure your dashboard securely.`,
+    `<h3>Welcome to Adubiaro Estates Private Portal</h3>
+     <p>Dear ${createdUser.name},</p>
+     <p>An administrative account has been securely setup for you on our private client portal.</p>
+     <p>Your roles permissions: <b>${createdUser.role.toUpperCase()}</b></p>
+     <table style="padding: 10px; background-color: #F8F4EC; border-radius: 6px; width: 100%;">
+       <tr><td><b>Authorized Username:</b></td><td>${createdUser.username}</td></tr>
+       <tr><td><b>Temporary Password:</b></td><td><code>${tempPassword}</code></td></tr>
+       <tr><td><b>Sign-Up Email:</b></td><td>${createdUser.email}</td></tr>
+     </table>
+     <p>You are required to log in and change your temporary password immediately upon landing.</p>
+     <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Login Dashboard</a></p>`,
+    'Welcome Registration'
+  );
+
+  res.status(201).json(createdUser);
+});
+
+// Admin Route to list system users list
+app.get('/api/admin/users', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  res.json(db.users);
+});
+
+// Admin route to manage plots, link to farms, assign plots to investors
+app.post('/api/admin/plots/create', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { farmId, plotNumber, sizeHectares, cropType, InvestorId, investmentAmount } = req.body;
+
+  const farm = db.farms.find(f => f.id === farmId);
+  if (!farm) {
+    return res.status(404).json({ error: 'Farm not found' });
+  }
+
+  const plotId = 'plot-' + Date.now();
+  const newPlot: FarmPlot = {
+    id: plotId,
+    farmId,
+    plotNumber,
+    sizeHectares: parseFloat(sizeHectares || '1.0'),
+    cropType: cropType || 'Oil Palm',
+    status: PlotStatus.ACTIVE
+  };
+
+  db.plots.push(newPlot);
+
+  if (InvestorId) {
+    const invPlot: InvestorPlot = {
+      id: 'invplot-' + Date.now(),
+      investorId: InvestorId,
+      plotId,
+      investmentAmount: parseFloat(investmentAmount || '20000'),
+      ownershipPercentage: 100,
+      startDate: new Date().toISOString().split('T')[0],
+      contractRef: 'CON-' + Date.now().toString().substring(7),
+      isActive: true
+    };
+    db.investorPlots.push(invPlot);
+  }
+
+  // Update total plots dynamically
+  farm.totalPlots = db.plots.filter(p => p.farmId === farmId).length;
+  farm.totalHectares = db.plots.filter(p => p.farmId === farmId).reduce((s, p) => s + p.sizeHectares, 0);
+
+  saveDb();
+  res.status(201).json({ plot: newPlot });
+});
+
+// Admin route to assign farm manager mapping
+app.post('/api/admin/assignments/create', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const { managerId, farmId } = req.body;
+  
+  const alreadyAssigned = db.assignments.find(a => a.managerId === managerId && a.farmId === farmId && a.isActive);
+  if (alreadyAssigned) {
+    return res.status(400).json({ error: 'Manager is already assigned to this farm.' });
+  }
+
+  const newAssign: FarmManagerAssignment = {
+    id: 'assign-' + Date.now(),
+    managerId,
+    farmId,
+    assignedDate: new Date().toISOString().split('T')[0],
+    isActive: true
+  };
+
+  db.assignments.push(newAssign);
+  saveDb();
+  res.json(newAssign);
+});
+
+// Route to get list of emails sent (simulated outbox logs)
+app.get('/api/emails/outbox', requireAuth, (req, res) => {
+  // Let only admin and related users inspect for security, or let anyone see simulated emails in demo mode
+  res.json(db.simulatedEmails);
+});
+
+// Reset command (simulates seed_demo)
+app.post('/api/admin/reset-db', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin authentication required.' });
+  }
+  db = getInitialDb();
+  saveDb();
+  res.json({ message: 'Database successfully restored to original seed demo values.' });
+});
+
+// INTEGRATE VITE NODE DEV SERVER MIDDLEWARE
+async function startServer() {
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    // Production Assets serving
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Portal backend running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();
