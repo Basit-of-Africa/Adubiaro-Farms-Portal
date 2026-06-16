@@ -226,6 +226,16 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
                       <span className="bg-[#52B788]/20 text-[#1B4332] text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">
                         {up.updateType}
                       </span>
+                      {user.role !== UserRole.INVESTOR && up.targetInvestorIds && up.targetInvestorIds.length > 0 && (
+                        <span className="bg-[#D8F3DC] text-[#1B4332] text-[9px] font-mono font-bold px-2 py-0.5 rounded-full select-none" title={`Visible to ${up.targetInvestorIds.length} select investors`}>
+                          🔒 Targeted ({up.targetInvestorIds.length})
+                        </span>
+                      )}
+                      {user.role !== UserRole.INVESTOR && (!up.targetInvestorIds || up.targetInvestorIds.length === 0) && (
+                        <span className="bg-gray-100 text-gray-500 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full select-none">
+                          🌍 Broadcast
+                        </span>
+                      )}
                       <h3 className="font-sans font-bold text-gray-800 text-sm">{up.title}</h3>
                     </div>
                     <div className="text-[10px] font-mono text-gray-400">

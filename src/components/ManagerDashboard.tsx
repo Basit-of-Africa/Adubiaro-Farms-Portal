@@ -42,6 +42,12 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
   const [updateSuccess, setUpdateSuccess] = useState<string | null>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
 
+  // Personalized targeting states
+  const [farmInvestors, setFarmInvestors] = useState<User[]>([]);
+  const [selectedInvestorIds, setSelectedInvestorIds] = useState<string[]>([]);
+  const [isPersonalized, setIsPersonalized] = useState(false);
+  const [fetchingInvestors, setFetchingInvestors] = useState(false);
+
   // Document state
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState('report');
@@ -70,9 +76,34 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
     }
   };
 
+  const fetchFarmInvestors = async (farmId: string) => {
+    if (!farmId) return;
+    try {
+      setFetchingInvestors(true);
+      const res = await fetch(`/api/farms/${farmId}/investors`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Could not pull farm investors');
+      const data = await res.json();
+      setFarmInvestors(data);
+    } catch (err) {
+      console.error('Error fetching farm investors:', err);
+    } finally {
+      setFetchingInvestors(false);
+    }
+  };
+
   useEffect(() => {
     fetchAssignedFarms();
   }, [token, refreshSignal]);
+
+  useEffect(() => {
+    if (selectedFarmId) {
+      fetchFarmInvestors(selectedFarmId);
+      setSelectedInvestorIds([]);
+      setIsPersonalized(false);
+    }
+  }, [selectedFarmId]);
 
   const handlePostUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +112,9 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
 
     try {
       if (!selectedFarmId) throw new Error('Please select an assigned farm first');
+      if (isPersonalized && selectedInvestorIds.length === 0) {
+        throw new Error('Please select at least one space holder or crop investor to target');
+      }
 
       const formData = new FormData();
       formData.append('title', updateTitle);
@@ -89,6 +123,9 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
       if (updateFile) {
         formData.append('photos', updateFile);
         formData.append('captions[0]', updateCaption);
+      }
+      if (isPersonalized && selectedInvestorIds.length > 0) {
+        formData.append('targetInvestorIds', JSON.stringify(selectedInvestorIds));
       }
 
       const res = await fetch(`/api/updates/farm/${selectedFarmId}/new`, {
@@ -100,11 +137,18 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to publish development update');
 
-      setUpdateSuccess(`Chronicle update posted successfully! Registered investors on ${assignedFarms.find(f => f.id === selectedFarmId)?.name} notified.`);
+      const farmName = assignedFarms.find(f => f.id === selectedFarmId)?.name || 'Estate';
+      if (isPersonalized) {
+        setUpdateSuccess(`Personalized chronicle update posted successfully! Retargeted only to ${selectedInvestorIds.length} select crop investor(s).`);
+      } else {
+        setUpdateSuccess(`Chronicle update posted successfully! Registered investors on ${farmName} notified.`);
+      }
       setUpdateTitle('');
       setUpdateBody('');
       setUpdateFile(null);
       setUpdateCaption('');
+      setSelectedInvestorIds([]);
+      setIsPersonalized(false);
       triggerRefreshSignal();
     } catch (err: any) {
       alert(err.message);
@@ -277,6 +321,73 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                       <option value="milestone">Milestone achievement</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Personalized / Targeted Update Section */}
+                <div className="bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-500/10 hover:border-emerald-500/20 rounded-2xl p-4 space-y-3 transition duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="font-sans font-bold text-xs text-[#1B4332]">Target Specific Investors</span>
+                      <span className="text-[10px] text-gray-500 font-sans mt-0.5">Toggle to limit this update to selected crop owners</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={isPersonalized}
+                        onChange={(e) => {
+                          setIsPersonalized(e.target.checked);
+                          if (!e.target.checked) setSelectedInvestorIds([]);
+                        }}
+                        className="sr-only peer" 
+                        id="personalized-update-toggle"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#52B788]"></div>
+                    </label>
+                  </div>
+
+                  {isPersonalized && (
+                    <div className="pt-2 border-t border-[#52B788]/10 animate-fade-in space-y-2">
+                      <label className="block text-[10px] uppercase font-mono font-bold text-gray-400 tracking-wider">Select 1 or more Investors</label>
+                      {fetchingInvestors ? (
+                        <div className="text-[11px] text-gray-400 font-mono animate-pulse">Scanning farm logs for investors...</div>
+                      ) : farmInvestors.length === 0 ? (
+                        <div className="text-[11px] text-amber-600 font-sans bg-amber-50 border border-amber-200/40 p-2.5 rounded-lg">There are no investors registered with active holdings in this estate plot.</div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                          {farmInvestors.map(inv => {
+                            const isChecked = selectedInvestorIds.includes(inv.id);
+                            return (
+                              <label 
+                                key={inv.id} 
+                                className={`flex items-center gap-2.5 p-2 rounded-xl border text-xs font-sans cursor-pointer transition select-none ${
+                                  isChecked 
+                                    ? 'bg-[#52B788]/15 border-[#52B788]' 
+                                    : 'bg-white border-gray-150 hover:bg-gray-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="rounded text-[#1B4332] focus:ring-[#1B4332] h-4.5 w-4.5"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isChecked) {
+                                      setSelectedInvestorIds(selectedInvestorIds.filter(id => id !== inv.id));
+                                    } else {
+                                      setSelectedInvestorIds([...selectedInvestorIds, inv.id]);
+                                    }
+                                  }}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-[#1B4332]">{inv.name}</span>
+                                  <span className="text-[9px] text-gray-400 font-mono font-bold leading-normal">{inv.email}</span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>

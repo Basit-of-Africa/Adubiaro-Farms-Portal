@@ -114,6 +114,7 @@ export interface FarmUpdate {
   title: string;
   body: string;
   updateType: UpdateType;
+  targetInvestorIds?: string[]; // 1 or more specific investors for personalized updates
   isPublished: boolean;
   createdAt: string;
   photos: UpdatePhoto[];

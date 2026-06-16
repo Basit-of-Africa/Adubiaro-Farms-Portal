@@ -578,7 +578,12 @@ app.get('/api/farms/:id', requireAuth, (req, res) => {
   }
 
   // 3. Gather updates
-  const updates = db.updates.filter(u => u.farmId === farmId && u.isPublished);
+  let updates = db.updates.filter(u => u.farmId === farmId && u.isPublished);
+  if (user.role === UserRole.INVESTOR) {
+    updates = updates.filter(u => {
+      return !u.targetInvestorIds || u.targetInvestorIds.length === 0 || u.targetInvestorIds.includes(user.id);
+    });
+  }
 
   // 4. Gather documents
   let documents = db.documents.filter(d => d.farmId === farmId);
@@ -631,11 +636,55 @@ app.get('/api/farms/:id', requireAuth, (req, res) => {
   });
 });
 
+// List investors of a farm (Admin/Manager assigned only)
+app.get('/api/farms/:id/investors', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  const farmId = req.params.id;
+
+  let authorized = false;
+  if (user.role === UserRole.ADMIN) {
+    authorized = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    authorized = db.assignments.some(
+      a => a.managerId === user.id && a.farmId === farmId && a.isActive
+    );
+  }
+
+  if (!authorized) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  // Find all plots belonging to the farm
+  const farmPlots = db.plots.filter(p => p.farmId === farmId);
+  const farmPlotIds = farmPlots.map(p => p.id);
+
+  // Find all active investorPlot relationships mapping to those plots
+  const ownerships = db.investorPlots.filter(ip => farmPlotIds.includes(ip.plotId) && ip.isActive);
+  const investorIds = [...new Set(ownerships.map(ip => ip.investorId))];
+
+  // Map to distinct users who are investors
+  const investors = db.users.filter(u => u.role === UserRole.INVESTOR && investorIds.includes(u.id));
+  res.json(investors);
+});
+
 // Post farm update (Admin/Manager assigned only)
 app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), async (req, res) => {
   const user = (req as any).user as User;
   const farmId = req.params.id;
   const { title, body, updateType } = req.body;
+
+  let targetInvestorIds: string[] = [];
+  if (req.body.targetInvestorIds) {
+    if (typeof req.body.targetInvestorIds === 'string') {
+      try {
+        targetInvestorIds = JSON.parse(req.body.targetInvestorIds);
+      } catch (e) {
+        targetInvestorIds = req.body.targetInvestorIds.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+    } else if (Array.isArray(req.body.targetInvestorIds)) {
+      targetInvestorIds = req.body.targetInvestorIds;
+    }
+  }
 
   const farm = db.farms.find(f => f.id === farmId);
   if (!farm) {
@@ -693,6 +742,7 @@ app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), as
     title,
     body,
     updateType: (updateType as UpdateType) || UpdateType.GENERAL,
+    targetInvestorIds,
     isPublished: true,
     createdAt: new Date().toISOString(),
     photos: updatePhotosList
@@ -701,7 +751,7 @@ app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), as
   db.updates.unshift(newUpdate);
   saveDb();
 
-  // EMAIL TRIGGER 1: New farm update posted → email all investors who own plots in that farm
+  // EMAIL TRIGGER 1: New farm update posted → email all investors who own plots in that farm (or selected target ones if personalized)
   const investorPlotsOnFarm = db.plots.filter(p => p.farmId === farmId);
   const investorIdsOnFarm = db.investorPlots
     .filter(ip => ip.isActive && investorPlotsOnFarm.some(p => p.id === ip.plotId))
@@ -709,8 +759,13 @@ app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), as
   
   const distinctInvestors = db.users.filter(u => u.role === UserRole.INVESTOR && investorIdsOnFarm.includes(u.id));
 
+  let finalNotifiedInvestors = distinctInvestors;
+  if (targetInvestorIds && targetInvestorIds.length > 0) {
+    finalNotifiedInvestors = distinctInvestors.filter(u => targetInvestorIds.includes(u.id));
+  }
+
   // Dispatch emails asynchronously
-  distinctInvestors.forEach(investor => {
+  finalNotifiedInvestors.forEach(investor => {
     dispatchEmail(
       investor.email,
       `New Update: ${farm.name} — ${newUpdate.title}`,
