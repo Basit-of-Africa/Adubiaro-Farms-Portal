@@ -16,6 +16,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [showSwitcher, setShowSwitcher] = useState(false);
+
   const handleLogin = async (e?: React.FormEvent, directUser?: string, directPass?: string) => {
     if (e) e.preventDefault();
     setLoading(true);
@@ -70,7 +72,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       <div className="w-full max-w-md bg-white rounded-3xl shadow-premium overflow-hidden border border-[#2D6A4F]/10">
         {/* Banner */}
         <div className="bg-gradient-to-b from-[#143427] to-[#0E251B] p-10 text-center text-white relative">
-          <div className="absolute top-4 right-4 bg-[#D4A017] text-[#0A2619] text-[8px] uppercase font-mono font-black px-2 py-0.5 rounded-md border border-[#D4A017]/30">
+          <div 
+            onClick={() => setShowSwitcher(!showSwitcher)}
+            title="Toggle Developer Assistant options"
+            className="absolute top-4 right-4 bg-[#D4A017] hover:bg-[#D4A017]/80 text-[#0A2619] text-[8px] uppercase font-mono font-black px-2 py-0.5 rounded-md border border-[#D4A017]/30 cursor-pointer select-none transition"
+          >
             SECURE PORTAL TLS
           </div>
           <div className="mx-auto w-14 h-14 bg-[#52B788]/10 border border-[#52B788]/20 rounded-2xl flex items-center justify-center mb-5 shadow-inner">
@@ -142,54 +148,56 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </button>
           </form>
 
-          {/* Quick Mock demo selector - extremely helpful for AI Studio tester */}
-          <div className="mt-8 border-t border-gray-100 pt-6">
-            <div className="flex items-center gap-2 mb-4 justify-center">
-              <Sparkles className="h-3.5 w-3.5 text-[#D4A017]" />
-              <h3 className="text-[10px] font-mono font-bold uppercase text-gray-400 tracking-widest text-center">Interactive Role Switcher</h3>
+          {/* Quick Mock demo selector - hidden by default, accessible by clicking SECURE PORTAL TLS badge above */}
+          {showSwitcher && (
+            <div className="mt-8 border-t border-gray-100 pt-6 animate-fadeIn">
+              <div className="flex items-center gap-2 mb-4 justify-center">
+                <Sparkles className="h-3.5 w-3.5 text-[#D4A017]" />
+                <h3 className="text-[10px] font-mono font-bold uppercase text-gray-400 tracking-widest text-center">Interactive Role Switcher</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  id="btn-demo-admin"
+                  type="button"
+                  onClick={() => handleDemoLogin('admin')}
+                  className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
+                >
+                  <div className="text-[11px] font-bold text-gray-700">Super Admin</div>
+                  <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">admin / Admin@1234</div>
+                </button>
+
+                <button
+                  id="btn-demo-manager"
+                  type="button"
+                  onClick={() => handleDemoLogin('manager')}
+                  className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
+                >
+                  <div className="text-[11px] font-bold text-gray-700">Farm Manager</div>
+                  <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">manager1 / Manager@1234</div>
+                </button>
+
+                <button
+                  id="btn-demo-investor1"
+                  type="button"
+                  onClick={() => handleDemoLogin('investor1')}
+                  className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
+                >
+                  <div className="text-[11px] font-bold text-gray-700">Investor One</div>
+                  <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">investor1 / Investor@1234</div>
+                </button>
+
+                <button
+                  id="btn-demo-investor2"
+                  type="button"
+                  onClick={() => handleDemoLogin('investor2')}
+                  className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
+                >
+                  <div className="text-[11px] font-bold text-gray-700">Investor Two</div>
+                  <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">investor2 / Investor@1234</div>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                id="btn-demo-admin"
-                type="button"
-                onClick={() => handleDemoLogin('admin')}
-                className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
-              >
-                <div className="text-[11px] font-bold text-gray-700">Super Admin</div>
-                <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">admin / Admin@1234</div>
-              </button>
-
-              <button
-                id="btn-demo-manager"
-                type="button"
-                onClick={() => handleDemoLogin('manager')}
-                className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
-              >
-                <div className="text-[11px] font-bold text-gray-700">Farm Manager</div>
-                <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">manager1 / Manager@1234</div>
-              </button>
-
-              <button
-                id="btn-demo-investor1"
-                type="button"
-                onClick={() => handleDemoLogin('investor1')}
-                className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
-              >
-                <div className="text-[11px] font-bold text-gray-700">Investor One</div>
-                <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">investor1 / Investor@1234</div>
-              </button>
-
-              <button
-                id="btn-demo-investor2"
-                type="button"
-                onClick={() => handleDemoLogin('investor2')}
-                className="p-3 bg-gray-50 hover:bg-neutral-100 border border-gray-150 hover:border-gray-300 rounded-xl text-left cursor-pointer transition duration-200"
-              >
-                <div className="text-[11px] font-bold text-gray-700">Investor Two</div>
-                <div className="text-[9px] font-mono text-gray-400 truncate font-semibold mt-0.5">investor2 / Investor@1234</div>
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
