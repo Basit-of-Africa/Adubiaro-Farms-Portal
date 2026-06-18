@@ -53,9 +53,11 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
       if (res.ok) {
         const data = await res.json();
         setNotifications(data);
+      } else {
+        console.warn('Notification endpoint responded with non-ok status:', res.status);
       }
     } catch (err) {
-      console.error('Failed to load notifications:', err);
+      console.warn('Failed to fetch notifications gracefully:', err);
     } finally {
       setLoading(false);
     }

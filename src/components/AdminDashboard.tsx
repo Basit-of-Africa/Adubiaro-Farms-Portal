@@ -205,7 +205,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
         setDbStatus(data);
       }
     } catch (err) {
-      console.error('Failed to load DB status:', err);
+      console.warn('Failed to load DB status:', err);
     } finally {
       setLoadingDbStatus(false);
     }
