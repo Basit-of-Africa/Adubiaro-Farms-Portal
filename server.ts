@@ -1592,7 +1592,7 @@ app.post('/api/financials/upload', requireAuth, (req, res) => {
       dispatchEmail(
         investor.email,
         `Financial Summary Available: ${newFin.period} ${newFin.year} — Plot ${plot?.plotNumber}`,
-        `Hello ${investor.name},\n\nA financial summary is now available with the following:\nAmount: $${newFin.payoutAmount}\nStatus: ${newFin.status}\nDue Date: ${newFin.payoutDate}\n\nPlease visit the portal to inspect detail metrics or log transaction records.`,
+        `Hello ${investor.name},\n\nA financial summary is now available with the following:\nAmount: ₦${newFin.payoutAmount}\nStatus: ${newFin.status}\nDue Date: ${newFin.payoutDate}\n\nPlease visit the portal to inspect detail metrics or log transaction records.`,
         `<h3>New Financial Payout Summary Ready</h3>
          <p>Dear ${investor.name},</p>
          <p>A payout ledger has been audited and compiled for your property:</p>
@@ -1600,7 +1600,7 @@ app.post('/api/financials/upload', requireAuth, (req, res) => {
            <tr><td><b>Plot:</b></td><td>${plot?.plotNumber || 'N/A'}</td></tr>
            <tr><td><b>Billing Period:</b></td><td>${newFin.period} ${newFin.year}</td></tr>
            <tr><td><b>Audited ROI:</b></td><td>${newFin.roiPercentage}%</td></tr>
-           <tr><td><b>Net Payout:</b></td><td><b>$${newFin.payoutAmount.toLocaleString()}</b></td></tr>
+           <tr><td><b>Net Payout:</b></td><td><b>₦${newFin.payoutAmount.toLocaleString()}</b></td></tr>
            <tr><td><b>Payment Status:</b></td><td><span style="background-color:${newFin.status === 'paid' ? '#52B788' : '#D4A017'};color:white;padding:3px 6px;border-radius:4px;font-size:12px;">${newFin.status.toUpperCase()}</span></td></tr>
            <tr><td><b>payout Scheduled Date:</b></td><td>${newFin.payoutDate}</td></tr>
          </table>
@@ -1851,7 +1851,7 @@ app.get('/api/notifications', requireAuth, (req, res) => {
         id: `roi-${fin.id}`,
         type: 'roi_payout',
         title: 'ROI Payout Published',
-        message: `A payout of $${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for Plot #${plot?.plotNumber || 'N/A'} has been published.`,
+        message: `A payout of ₦${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for Plot #${plot?.plotNumber || 'N/A'} has been published.`,
         date: fin.payoutDate || new Date().toISOString(),
         relatedId: fin.id,
         meta: {
@@ -1876,7 +1876,7 @@ app.get('/api/notifications', requireAuth, (req, res) => {
         id: `roi-${fin.id}`,
         type: 'roi_payout',
         title: 'ROI Payout Received',
-        message: `Your plot #${plot?.plotNumber || 'N/A'} of crop "${plot?.cropType || 'N/A'}" received a payout of $${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for ${fin.period} ${fin.year}.`,
+        message: `Your plot #${plot?.plotNumber || 'N/A'} of crop "${plot?.cropType || 'N/A'}" received a payout of ₦${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for ${fin.period} ${fin.year}.`,
         date: fin.payoutDate || new Date().toISOString(),
         relatedId: fin.id,
         meta: {

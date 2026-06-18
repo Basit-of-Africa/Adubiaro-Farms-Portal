@@ -300,7 +300,7 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
                     <div className="bg-amber-50/30 p-3 rounded-xl border border-amber-100/50">
                       <span className="text-amber-700/60 font-mono text-[10px] uppercase font-bold tracking-wider">Payout Amount</span>
                       <p className="text-amber-800 font-mono font-extrabold mt-1 text-base">
-                        ${selectedAlert.meta.payoutAmount?.toLocaleString()}
+                        ₦{selectedAlert.meta.payoutAmount?.toLocaleString()}
                       </p>
                     </div>
                     <div className="bg-amber-50/30 p-3 rounded-xl border border-amber-100/50">
