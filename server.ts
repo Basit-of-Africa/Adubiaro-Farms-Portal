@@ -29,7 +29,8 @@ import {
   SimulatedEmail,
   PlotStatus,
   UpdateType,
-  FinancialStatus
+  FinancialStatus,
+  SystemSettings
 } from './src/types';
 
 // Establish folders
@@ -60,6 +61,16 @@ const upload = multer({ storage });
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Super Admin Latency Injection Middleware
+app.use((req, res, next) => {
+  const settings = getSettings();
+  if (settings.simulatedLatency && settings.simulatedLatency > 0 && req.url.startsWith('/api')) {
+    setTimeout(next, settings.simulatedLatency);
+  } else {
+    next();
+  }
+});
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -113,6 +124,7 @@ interface DatabaseSchema {
   documents: Document[];
   financials: FinancialSummary[];
   simulatedEmails: SimulatedEmail[];
+  settings?: SystemSettings;
 }
 
 // Seed helper
@@ -362,11 +374,44 @@ function getInitialDb(): DatabaseSchema {
         sentAt: '2025-06-01T08:00:00Z',
         category: 'Welcome'
       }
-    ]
+    ],
+    settings: {
+      databaseMode: 'auto',
+      simulatedLatency: 0,
+      enableNotifications: true,
+      enableEmailSimulation: true,
+      minimumPayoutRoi: 2.5,
+      allowedCrops: ['Oil Palm (Tenera Hybrid)', 'Coconut (Dwarf Hybrid)', 'Cocoa (Amelonado)', 'Cashew (Anacardium Occidental)'],
+      portalName: 'Adubiaro Farm Portal',
+      logoText: 'ADUBIARO',
+      accentColor: 'emerald',
+      announcementBanner: '',
+      bannerType: 'none'
+    }
   };
 }
 
 let db: DatabaseSchema = getInitialDb();
+
+function getSettings(): SystemSettings {
+  if (!db.settings) {
+    db.settings = {
+      databaseMode: 'auto',
+      simulatedLatency: 0,
+      enableNotifications: true,
+      enableEmailSimulation: true,
+      minimumPayoutRoi: 2.5,
+      allowedCrops: ['Oil Palm (Tenera Hybrid)', 'Coconut (Dwarf Hybrid)', 'Cocoa (Amelonado)', 'Cashew (Anacardium Occidental)'],
+      portalName: 'Adubiaro Farm Portal',
+      logoText: 'ADUBIARO',
+      accentColor: 'emerald',
+      announcementBanner: '',
+      bannerType: 'none'
+    };
+  }
+  return db.settings;
+}
+
 let pgPool: pg.Pool | null = null;
 let usePostgres = false;
 let postgresError: string | null = null;
@@ -735,9 +780,18 @@ function loadLocalJsonDb() {
 
 // Main integration initialization for PostgreSQL
 async function initPostgres() {
+  // Load local database config first to determine settings-based overrides
+  loadLocalJsonDb();
+
+  const settings = getSettings();
+  if (settings.databaseMode === 'local_json') {
+    console.log('⚠️ Forced local JSON database mode via Super Admin settings. Bypassing PostgreSQL.');
+    usePostgres = false;
+    return;
+  }
+
   if (!process.env.DATABASE_URL) {
     console.log('⚠️ DATABASE_URL not set. Running in local JSON file mode.');
-    loadLocalJsonDb();
     return;
   }
 
@@ -937,6 +991,12 @@ function saveDb() {
 
 // Simulated real-time triggers for notification emails
 async function dispatchEmail(to: string, subject: string, textBody: string, htmlBody: string, category: string) {
+  const settings = getSettings();
+  if (!settings.enableEmailSimulation) {
+    console.log('🔇 Email simulation disabled by Super Admin. Bypassing email dispatch.');
+    return;
+  }
+
   // 1. Appends to internal simulated log
   const newEmail: SimulatedEmail = {
     id: 'email-' + Date.now().toString(),
@@ -1561,6 +1621,12 @@ app.post('/api/financials/upload', requireAuth, (req, res) => {
 
   const { plotId, period, year, roiPercentage, payoutAmount, payoutDate, notes, status } = req.body;
 
+  const settings = getSettings();
+  const fileRoi = parseFloat(roiPercentage || '0');
+  if (fileRoi < settings.minimumPayoutRoi) {
+    return res.status(400).json({ error: `Transaction rejected: Financial ROI of ${fileRoi}% is below the active System Minimum ROI limit (${settings.minimumPayoutRoi}%) established in Settings.` });
+  }
+
   // Check unique together constraint [plotId + period + year]
   const alreadyExists = db.financials.some(
     fin => fin.plotId === plotId && fin.period === period && fin.year === parseInt(year)
@@ -1831,6 +1897,11 @@ app.get('/api/notifications', requireAuth, (req, res) => {
   const user = (req as any).user as User;
   if (!user) {
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const settings = getSettings();
+  if (!settings.enableNotifications) {
+    return res.json([]);
   }
 
   const notifications: any[] = [];
@@ -2176,6 +2247,60 @@ app.get('/api/admin/db-status', requireAuth, (req, res) => {
     dbPort,
     dbName,
     configured: !!process.env.DATABASE_URL
+  });
+});
+
+app.get('/api/admin/settings', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  res.json(getSettings());
+});
+
+app.put('/api/admin/settings', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+
+  const currentSettings = getSettings();
+  const newSettings = req.body;
+
+  if (newSettings.databaseMode !== undefined) currentSettings.databaseMode = newSettings.databaseMode;
+  if (newSettings.simulatedLatency !== undefined) currentSettings.simulatedLatency = parseInt(newSettings.simulatedLatency !== null ? newSettings.simulatedLatency : '0');
+  if (newSettings.enableNotifications !== undefined) currentSettings.enableNotifications = Boolean(newSettings.enableNotifications);
+  if (newSettings.enableEmailSimulation !== undefined) currentSettings.enableEmailSimulation = Boolean(newSettings.enableEmailSimulation);
+  if (newSettings.minimumPayoutRoi !== undefined) currentSettings.minimumPayoutRoi = parseFloat(newSettings.minimumPayoutRoi !== null ? newSettings.minimumPayoutRoi : '0');
+  if (newSettings.allowedCrops !== undefined) currentSettings.allowedCrops = Array.isArray(newSettings.allowedCrops) ? newSettings.allowedCrops : currentSettings.allowedCrops;
+  if (newSettings.portalName !== undefined) currentSettings.portalName = newSettings.portalName;
+  if (newSettings.logoText !== undefined) currentSettings.logoText = newSettings.logoText;
+  if (newSettings.accentColor !== undefined) currentSettings.accentColor = newSettings.accentColor;
+  if (newSettings.announcementBanner !== undefined) currentSettings.announcementBanner = newSettings.announcementBanner;
+  if (newSettings.bannerType !== undefined) currentSettings.bannerType = newSettings.bannerType;
+
+  // React to database mode shift on the fly
+  if (currentSettings.databaseMode === 'local_json') {
+    usePostgres = false;
+  } else if (currentSettings.databaseMode === 'postgres_forced' || currentSettings.databaseMode === 'auto') {
+    if (!usePostgres && process.env.DATABASE_URL) {
+      initPostgres().catch(err => console.error('Failed to rebuild Postgres connection during settings shift:', err));
+    }
+  }
+
+  saveDb();
+  res.json(currentSettings);
+});
+
+app.get('/api/portal/settings', (req, res) => {
+  const settings = getSettings();
+  res.json({
+    portalName: settings.portalName,
+    logoText: settings.logoText,
+    accentColor: settings.accentColor,
+    announcementBanner: settings.announcementBanner,
+    bannerType: settings.bannerType,
+    allowedCrops: settings.allowedCrops
   });
 });
 

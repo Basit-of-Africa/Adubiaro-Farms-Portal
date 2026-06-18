@@ -60,6 +60,13 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [dbStatus, setDbStatus] = useState<any>(null);
   const [loadingDbStatus, setLoadingDbStatus] = useState<boolean>(false);
 
+  // Administrative Control & Feature custom-styling states
+  const [sysSettings, setSysSettings] = useState<any>(null);
+  const [loadingSysSettings, setLoadingSysSettings] = useState<boolean>(false);
+  const [saveSysSuccess, setSaveSysSuccess] = useState<string | null>(null);
+  const [saveSysError, setSaveSysError] = useState<string | null>(null);
+  const [newCropTag, setNewCropTag] = useState<string>('');
+
   // 6. Manage Farm Estates (Add/Edit)
   const [selectedFarmToEdit, setSelectedFarmToEdit] = useState<string>('new'); // 'new' or specific farm.id
   const [farmName, setFarmName] = useState('');
@@ -211,6 +218,51 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     }
   };
 
+  const fetchSysSettings = async () => {
+    try {
+      setLoadingSysSettings(true);
+      setSaveSysError(null);
+      const res = await fetch('/api/admin/settings', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Could not load system settings');
+      const data = await res.json();
+      setSysSettings(data);
+    } catch (err: any) {
+      setSaveSysError(err.message || 'Error occurred fetching configurations.');
+    } finally {
+      setLoadingSysSettings(false);
+    }
+  };
+
+  const handleSaveSettings = async (updatedSettings: any) => {
+    try {
+      setSaveSysSuccess(null);
+      setSaveSysError(null);
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedSettings)
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update system settings');
+      }
+      const data = await res.json();
+      setSysSettings(data);
+      setSaveSysSuccess('System configurations updated successfully. Branding themes & features have been synchronized.');
+      if (triggerRefreshSignal) {
+        triggerRefreshSignal();
+      }
+      setTimeout(fetchDbStatus, 1500);
+    } catch (err: any) {
+      setSaveSysError(err.message || 'Error occurred while saving configurations.');
+    }
+  };
+
   const handleTriggerBackup = async () => {
     if (triggeringBackup) return;
     try {
@@ -236,8 +288,15 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     if (activeFormTab === 'settings') {
       fetchBackups();
       fetchDbStatus();
+      fetchSysSettings();
     }
   }, [activeFormTab]);
+
+  useEffect(() => {
+    if (sysSettings?.allowedCrops && sysSettings.allowedCrops.length > 0) {
+      setAllocCrop(sysSettings.allowedCrops[0]);
+    }
+  }, [sysSettings]);
 
   // Handle farm change in doc upload or plot allocations to fetch appropriate plot numbers
   const handleDocFarmChange = async (fId: string) => {
@@ -1189,13 +1248,25 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
 
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Crop Type Cultivar</label>
-                    <input
-                      type="text"
-                      value={allocCrop}
-                      onChange={(e) => setAllocCrop(e.target.value)}
-                      placeholder="e.g. Oil Palm Tenera Hybrid"
-                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
-                    />
+                    {sysSettings?.allowedCrops && sysSettings.allowedCrops.length > 0 ? (
+                      <select
+                        value={allocCrop}
+                        onChange={(e) => setAllocCrop(e.target.value)}
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50 cursor-pointer"
+                      >
+                        {sysSettings.allowedCrops.map((c: string) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={allocCrop}
+                        onChange={(e) => setAllocCrop(e.target.value)}
+                        placeholder="e.g. Oil Palm Tenera Hybrid"
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -1516,7 +1587,283 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
               <div className="space-y-6 animate-fade-in">
                 <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-2">
                   <Settings className="text-[#1B4332] h-4 w-4" />
-                  <h3 className="font-sans font-bold text-sm text-gray-800">System Settings & Maintenance Logs</h3>
+                  <h3 className="font-sans font-bold text-sm text-gray-800">Super Admin Core Control Console</h3>
+                </div>
+
+                {/* 1. INTERACTIVE CONTROL CENTER */}
+                <div className="bg-white p-6 rounded-3xl border border-gray-150 space-y-6">
+                  <div>
+                    <h4 className="text-sm font-extrabold uppercase font-mono text-[#1B4332] tracking-wider mb-1">Interactive System Admin Consoles</h4>
+                    <p className="text-[11px] text-gray-400">Configure global business rules, toggle background simulation features, adapt brand looks/feel, and crop validation presets.</p>
+                  </div>
+
+                  {loadingSysSettings || !sysSettings ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-[#1B4332] border-t-transparent" />
+                      <span className="text-[10px] font-mono text-gray-400">Loading system configurations...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Success / Error Alerts */}
+                      {saveSysSuccess && (
+                        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium">
+                          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+                          <span>{saveSysSuccess}</span>
+                        </div>
+                      )}
+                      {saveSysError && (
+                        <div className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in font-medium">
+                          <ShieldAlert className="h-4.5 w-4.5 text-red-600 shrink-0" />
+                          <span>{saveSysError}</span>
+                        </div>
+                      )}
+
+                      {/* Config Form Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* Box 1: Core Engines */}
+                        <div className="space-y-4 bg-[#FBF9F4]/40 p-5 rounded-2xl border border-gray-100">
+                          <h5 className="text-[11px] font-mono font-bold uppercase text-[#1B4332] tracking-widest border-b border-gray-100 pb-1.5">1. Core Engine Configurations</h5>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Database Connection Target</label>
+                              <select
+                                value={sysSettings.databaseMode}
+                                onChange={(e) => handleSaveSettings({ ...sysSettings, databaseMode: e.target.value })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] cursor-pointer"
+                              >
+                                <option value="auto">Automatic (Postgres with Server Fallback)</option>
+                                <option value="local_json">Forced Local db.json mode (Offline Safe)</option>
+                                <option value="postgres_forced">Forced PostgreSQL Mode (Raise Error if Down)</option>
+                              </select>
+                              <span className="text-[9.5px] font-mono text-gray-400 mt-1 block leading-tight">
+                                Controls routing to PostgreSQL. Switching to Forced Local will immediately drop the cloud instance connection cleanly.
+                              </span>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Simulated Network Latency (ms)</label>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="3000"
+                                  step="250"
+                                  value={sysSettings.simulatedLatency || 0}
+                                  onChange={(e) => setSysSettings({ ...sysSettings, simulatedLatency: parseInt(e.target.value) })}
+                                  onMouseUp={() => handleSaveSettings({ ...sysSettings, simulatedLatency: sysSettings.simulatedLatency })}
+                                  onTouchEnd={() => handleSaveSettings({ ...sysSettings, simulatedLatency: sysSettings.simulatedLatency })}
+                                  className="flex-1 accent-[#1B4332]"
+                                />
+                                <span className="text-xs font-mono font-bold text-gray-700 w-12 text-right">{sysSettings.simulatedLatency || 0}ms</span>
+                              </div>
+                              <span className="text-[9.5px] font-mono text-gray-400 mt-1 block leading-tight">
+                                Delays server API replies. Use to inspect visual skeleton state transitions, loaders, and network thresholds.
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Box 2: Feature & Business Controls */}
+                        <div className="space-y-4 bg-[#FBF9F4]/40 p-5 rounded-2xl border border-gray-100">
+                          <h5 className="text-[11px] font-mono font-bold uppercase text-[#1B4332] tracking-widest border-b border-gray-100 pb-1.5">2. Feature Permissions & Rules</h5>
+                          
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-xl">
+                              <div>
+                                <span className="text-xs font-bold text-gray-700 block">User Push Notifications</span>
+                                <span className="text-[9.5px] font-mono text-gray-400 block max-w-[200px]">System-wide dynamic alerts bell module.</span>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={sysSettings.enableNotifications}
+                                  onChange={(e) => handleSaveSettings({ ...sysSettings, enableNotifications: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#52B788]"></div>
+                              </label>
+                            </div>
+
+                            <div className="flex items-center justify-between p-2.5 bg-white border border-gray-100 rounded-xl">
+                              <div>
+                                <span className="text-xs font-bold text-gray-700 block">Simulate Email Dispatches</span>
+                                <span className="text-[9.5px] font-mono text-gray-400 block max-w-[200px]">Logs all Welcome & Payout alerts to outbox.</span>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={sysSettings.enableEmailSimulation}
+                                  onChange={(e) => handleSaveSettings({ ...sysSettings, enableEmailSimulation: e.target.checked })}
+                                  className="sr-only peer"
+                                />
+                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#52B788]"></div>
+                              </label>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Active Minimum ROI limit (%)</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  value={sysSettings.minimumPayoutRoi || ''}
+                                  onChange={(e) => setSysSettings({ ...sysSettings, minimumPayoutRoi: parseFloat(e.target.value) || 0 })}
+                                  onBlur={() => handleSaveSettings({ ...sysSettings, minimumPayoutRoi: sysSettings.minimumPayoutRoi })}
+                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-[#1B4332]"
+                                />
+                              </div>
+                              <span className="text-[9.5px] font-mono text-gray-400 mt-1 block leading-tight">
+                                Rejects any transaction record attempts below this value. Prevents human data entry mistakes.
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Box 3: Branding & Custom Looks */}
+                        <div className="space-y-4 bg-[#FBF9F4]/40 p-5 rounded-2xl border border-gray-100 md:col-span-2">
+                          <h5 className="text-[11px] font-mono font-bold uppercase text-[#1B4332] tracking-widest border-b border-gray-100 pb-1.5">3. Appearance Branding & Broadcast Banners</h5>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Client Portal Title Name</label>
+                              <input
+                                type="text"
+                                value={sysSettings.portalName || ''}
+                                onChange={(e) => setSysSettings({ ...sysSettings, portalName: e.target.value })}
+                                onBlur={() => handleSaveSettings({ ...sysSettings, portalName: sysSettings.portalName })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-[#1B4332]"
+                                placeholder="Adubiaro Farm Portal"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Header Icon Logo text</label>
+                              <input
+                                type="text"
+                                value={sysSettings.logoText || ''}
+                                onChange={(e) => setSysSettings({ ...sysSettings, logoText: e.target.value })}
+                                onBlur={() => handleSaveSettings({ ...sysSettings, logoText: sysSettings.logoText })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-[#1B4332]"
+                                placeholder="ADUBIARO"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Accent Brand Color Theme</label>
+                              <select
+                                value={sysSettings.accentColor}
+                                onChange={(e) => handleSaveSettings({ ...sysSettings, accentColor: e.target.value })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] cursor-pointer"
+                              >
+                                <option value="emerald">Emerald Green (Brand Standard)</option>
+                                <option value="forest">Forest Green (Deep High-Contrast)</option>
+                                <option value="amber">Amber Gold (Premium Harvest)</option>
+                                <option value="slate">Slate Obsidian (Executive Editorial)</option>
+                              </select>
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Announcement Broadcast Message</label>
+                              <input
+                                type="text"
+                                value={sysSettings.announcementBanner || ''}
+                                onChange={(e) => setSysSettings({ ...sysSettings, announcementBanner: e.target.value })}
+                                onBlur={() => handleSaveSettings({ ...sysSettings, announcementBanner: sysSettings.announcementBanner })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-[#1B4332]"
+                                placeholder="Enter announcement text to broadcast systemwide..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-500">Banner Alert Type</label>
+                              <select
+                                value={sysSettings.bannerType}
+                                onChange={(e) => handleSaveSettings({ ...sysSettings, bannerType: e.target.value })}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] cursor-pointer"
+                              >
+                                <option value="none">Disabled (No Banner Layout)</option>
+                                <option value="info">Info Alert (Sky Blue Theme)</option>
+                                <option value="warning">Critical Warning (Amber Gold Theme)</option>
+                                <option value="success">Success Broadcast (Emerald Green Theme)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Box 4: Supported Culturable Crops */}
+                        <div className="space-y-4 bg-[#FBF9F4]/40 p-5 rounded-2xl border border-gray-100 md:col-span-2">
+                          <h5 className="text-[11px] font-mono font-bold uppercase text-[#1B4332] tracking-widest border-b border-gray-100 pb-1.5">4. Dynamic Validation Presets (Cultivated Crop Breeds)</h5>
+                          
+                          <div className="space-y-3">
+                            <span className="text-[10.5px] font-sans text-gray-400 block leading-tight">
+                              These crop seeds and breed categories are dynamically enforced across land plot definitions and investment tracking profiles.
+                            </span>
+
+                            <div className="flex flex-wrap gap-2">
+                              {(sysSettings.allowedCrops || []).map((crop: string, idx: number) => (
+                                <span key={idx} className="bg-emerald-50 text-[#1B4332] border border-emerald-100 text-[10.5px] px-3 py-1 rounded-full flex items-center gap-1.5 font-medium select-none animate-fade-in">
+                                  <span>{crop}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updatedList = sysSettings.allowedCrops.filter((c: string) => c !== crop);
+                                      handleSaveSettings({ ...sysSettings, allowedCrops: updatedList });
+                                    }}
+                                    className="hover:text-red-600 font-bold transition text-xs select-none cursor-pointer"
+                                    title={`Remove ${crop}`}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                              {(!sysSettings.allowedCrops || sysSettings.allowedCrops.length === 0) && (
+                                <span className="text-xs text-gray-400 italic">No custom crops whitelist declared.</span>
+                              )}
+                            </div>
+
+                            <form 
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                if (!newCropTag.trim()) return;
+                                const originalCrops = sysSettings.allowedCrops || [];
+                                if (originalCrops.includes(newCropTag.trim())) {
+                                  setSaveSysError('Crop breed is already declared in custom whitelists.');
+                                  return;
+                                }
+                                const updatedCrops = [...originalCrops, newCropTag.trim()];
+                                setNewCropTag('');
+                                handleSaveSettings({ ...sysSettings, allowedCrops: updatedCrops });
+                              }}
+                              className="flex gap-2 max-w-md"
+                            >
+                              <input
+                                type="text"
+                                value={newCropTag}
+                                onChange={(e) => setNewCropTag(e.target.value)}
+                                className="flex-1 bg-white border border-gray-100 rounded-lg px-3 py-1.5 text-xs text-gray-700 outline-none focus:border-[#1B4332]"
+                                placeholder="e.g. Kola Nut (Cola Acuminata)"
+                              />
+                              <button
+                                type="submit"
+                                className="bg-[#1B4332] hover:bg-[#2D6A4F] text-white text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg transition cursor-pointer"
+                              >
+                                + Add Crop Whitelist
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 mt-8 mb-4 border-b border-gray-50 pb-2">
+                  <Database className="text-[#1B4332] h-4 w-4" />
+                  <h3 className="font-sans font-bold text-sm text-gray-800">System Infrastructure Status & Backups</h3>
                 </div>
 
                 <div className="bg-[#FBF9F4] p-4.5 rounded-2xl border border-[#2D6A4F]/10 flex gap-4">

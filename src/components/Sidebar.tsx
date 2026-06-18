@@ -14,6 +14,7 @@ import {
   LogOut, 
   ShieldAlert,
   Users,
+  Settings,
   X
 } from 'lucide-react';
 
@@ -24,9 +25,10 @@ interface SidebarProps {
   onLogout: () => void;
   isOpen?: boolean;
   onClose?: () => void;
+  logoText?: string;
 }
 
-export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpen, onClose }: SidebarProps) {
+export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpen, onClose, logoText }: SidebarProps) {
   const getRoleBadgeColor = (role: UserRole) => {
     switch (role) {
       case UserRole.ADMIN: return 'bg-red-500/15 text-red-500 border-red-500/25';
@@ -68,7 +70,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
             <Sprout className="h-6 w-6 text-[#52B788]" />
           </div>
           <div>
-            <h1 className="font-serif font-bold text-xl tracking-wide text-white leading-tight">Adubiaro</h1>
+            <h1 className="font-serif font-bold text-xl tracking-wide text-white leading-tight">{logoText || 'Adubiaro'}</h1>
             <p className="text-[9px] uppercase tracking-widest text-[#52B788] font-mono leading-none font-bold mt-0.5">ESTATE INVESTOR PORTAL</p>
           </div>
         </div>
@@ -152,6 +154,25 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
               <span className="bg-[#D4A017] text-[#0A2619] text-[8px] px-2 py-0.5 rounded-full font-mono font-black border border-[#D4A017]/30">LIVE</span>
             </div>
           </button>
+
+          {/* Super Admin systemwide settings */}
+          {user.role === UserRole.ADMIN && (
+            <button
+              id="nav-settings"
+              onClick={() => {
+                setActiveTab('settings');
+                if (onClose) onClose();
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer ${
+                activeTab === 'settings' 
+                  ? 'bg-gradient-to-r from-[#52B788] to-[#3B946A] text-[#0A2619] shadow-lg shadow-[#1B4332]/40 font-bold' 
+                  : 'text-gray-300 hover:bg-white/[0.04] hover:text-white'
+              }`}
+            >
+              <Settings className="h-4.5 w-4.5" />
+              <span>System Settings</span>
+            </button>
+          )}
         </nav>
       </div>
 

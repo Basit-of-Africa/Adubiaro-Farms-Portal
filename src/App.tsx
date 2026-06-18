@@ -13,6 +13,7 @@ import FarmDetail from './components/FarmDetail';
 import FinancialsView from './components/FinancialsView';
 import EmailOutbox from './components/EmailOutbox';
 import NotificationBell from './components/NotificationBell';
+import SettingsView from './components/SettingsView';
 import { User, UserRole } from './types';
 import { 
   Sprout, 
@@ -39,6 +40,31 @@ export default function App() {
   // Refresh signals allowing children tables to update whenever operations forms are saved
   const [refreshSignal, setRefreshSignal] = useState<number>(0);
   const triggerRefreshSignal = () => setRefreshSignal((prev) => prev + 1);
+
+  const [portalSettings, setPortalSettings] = useState<any>({
+    portalName: 'Adubiaro Farm Portal',
+    logoText: 'ADUBIARO',
+    accentColor: 'emerald',
+    announcementBanner: '',
+    bannerType: 'none',
+    allowedCrops: [],
+  });
+
+  const fetchPortalSettings = async () => {
+    try {
+      const res = await fetch('/api/portal/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setPortalSettings(data);
+      }
+    } catch (err) {
+      console.warn('Failed to load public portal settings:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPortalSettings();
+  }, [refreshSignal]);
 
   useEffect(() => {
     // Session restore check
@@ -86,6 +112,20 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FBF9F4] text-[#2c3e35] font-sans flex flex-col antialiased">
       
+      {/* Portal Announcement Banner */}
+      {portalSettings?.announcementBanner && portalSettings?.bannerType !== 'none' && (
+        <div id="portal-announcement-banner" className={`text-center py-2 px-4 text-xs font-semibold flex items-center justify-center gap-2 select-none shadow-sm transition border-b leading-tight z-40 ${
+          portalSettings.bannerType === 'info' 
+            ? 'bg-blue-50 text-blue-800 border-blue-200'
+            : portalSettings.bannerType === 'warning'
+              ? 'bg-amber-50 text-amber-800 border-amber-200'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+        }`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse shrink-0" />
+          <span><b>ANNOUNCEMENT:</b> {portalSettings.announcementBanner}</span>
+        </div>
+      )}
+      
       {/* Mobile Top Navigation Headbar */}
       <header id="mobile-top-bar" className="lg:hidden flex items-center justify-between bg-[#143427] text-white py-3 px-4 sticky top-0 z-30 shadow-md">
         <div className="flex items-center gap-2">
@@ -102,7 +142,7 @@ export default function App() {
           
           <div className="flex items-center gap-2 select-none">
             <Sprout className="h-5 w-5 text-[#52B788]" />
-            <span className="font-serif font-bold text-base tracking-wide text-white">Adubiaro</span>
+            <span className="font-serif font-bold text-base tracking-wide text-white">{portalSettings?.logoText || 'Adubiaro'}</span>
           </div>
         </div>
         
@@ -126,6 +166,7 @@ export default function App() {
           setIsSidebarOpen(false);
         }} 
         onLogout={handleLogout} 
+        logoText={portalSettings?.logoText}
       />
 
       {/* Mobile Sidebar backdrop */}
@@ -228,6 +269,28 @@ export default function App() {
             token={authToken} 
             refreshSignal={refreshSignal} 
           />
+        )}
+
+        {/* SUPER ADMIN CORE CONTROL CONSOLE SETTINGS TAB */}
+        {activeTab === 'settings' && (
+          currentUser.role !== UserRole.ADMIN ? (
+            <div className="p-8 bg-red-50 border-l-4 border-red-500 rounded-2xl flex items-start gap-3">
+              <ShieldAlert className="text-red-500 h-6 w-6 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-sans font-bold text-sm text-red-800">403 Access Unauthorized</h3>
+                <p className="text-xs text-red-700 mt-1 max-w-xl">
+                  Only Super Administrators have authorized clearance to manage global system configurations, database mode status, and role credential management panels.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <SettingsView 
+              user={currentUser} 
+              token={authToken} 
+              triggerRefreshSignal={triggerRefreshSignal} 
+              refreshSignal={refreshSignal} 
+            />
+          )
         )}
 
 

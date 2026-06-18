@@ -157,3 +157,17 @@ export interface SimulatedEmail {
   sentAt: string;
   category: string;
 }
+
+export interface SystemSettings {
+  databaseMode: 'auto' | 'local_json' | 'postgres_forced';
+  simulatedLatency: number;
+  enableNotifications: boolean;
+  enableEmailSimulation: boolean;
+  minimumPayoutRoi: number;
+  allowedCrops: string[];
+  portalName: string;
+  logoText: string;
+  accentColor: string;
+  announcementBanner: string;
+  bannerType: 'info' | 'warning' | 'success' | 'none';
+}
