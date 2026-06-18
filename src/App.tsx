@@ -12,6 +12,7 @@ import InvestorDashboard from './components/InvestorDashboard';
 import FarmDetail from './components/FarmDetail';
 import FinancialsView from './components/FinancialsView';
 import EmailOutbox from './components/EmailOutbox';
+import NotificationBell from './components/NotificationBell';
 import { User, UserRole } from './types';
 import { 
   Sprout, 
@@ -105,8 +106,11 @@ export default function App() {
           </div>
         </div>
         
-        <div className="text-[9px] font-mono tracking-wider bg-white/5 border border-white/10 px-2.5 py-1 rounded-full uppercase text-[#52B788] font-bold">
-          {currentUser.role.split('_').join(' ')}
+        <div className="flex items-center gap-3">
+          <div className="text-[9px] font-mono tracking-wider bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full uppercase text-[#52B788] font-bold">
+            {currentUser.role.split('_').join(' ')}
+          </div>
+          <NotificationBell user={currentUser} token={authToken} refreshSignal={refreshSignal} />
         </div>
       </header>
 
@@ -136,6 +140,25 @@ export default function App() {
       {/* Main Container workspace */}
       <main className="flex-1 lg:pl-[280px] p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full min-h-screen">
         
+        {/* Desktop Top Header Bar with Live Alerts */}
+        <div className="hidden lg:flex justify-between items-center bg-white border border-[#2D6A4F]/10 px-6 py-4.5 rounded-3xl shadow-premium">
+          <div>
+            <span className="text-[10px] font-mono font-bold text-[#2D6A4F]/60 uppercase tracking-widest">Active Secure Session</span>
+            <h2 className="font-serif font-extrabold text-[#1B4332] text-xl mt-0.5">Welcome back, {currentUser.name}</h2>
+          </div>
+          <div className="flex items-center gap-5">
+            <div className="text-right">
+              <p className="text-xs font-extrabold text-gray-700">{currentUser.email}</p>
+              <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <p className="text-[9.5px] font-mono text-[#2D6A4F] uppercase font-bold tracking-wider">{currentUser.role.split('_').join(' ')} Profile</p>
+              </div>
+            </div>
+            <div className="h-8 w-px bg-gray-150" />
+            <NotificationBell user={currentUser} token={authToken} refreshSignal={refreshSignal} />
+          </div>
+        </div>
+
         {/* Dynamic workspace router */}
         {activeTab === 'dashboard' && (
           <>

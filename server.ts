@@ -61,7 +61,7 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Setup lazy Cloudinary configuration
 let isCloudinaryConfigured = false;
@@ -1821,6 +1821,151 @@ app.post('/api/admin/assignments/create', requireAuth, (req, res) => {
 app.get('/api/emails/outbox', requireAuth, (req, res) => {
   // Let only admin and related users inspect for security, or let anyone see simulated emails in demo mode
   res.json(db.simulatedEmails);
+});
+
+// Route to get user-specific alerts/notifications
+app.get('/api/notifications', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const notifications: any[] = [];
+
+  // 1. Gather investor plots/farms if needed
+  const myInvestorPlots = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+  const myPlotIds = myInvestorPlots.map(ip => ip.plotId);
+  const myInvestorFarmsList = db.plots.filter(p => myPlotIds.includes(p.id));
+  const myInvestorFarmIds = [...new Set(myInvestorFarmsList.map(p => p.farmId))];
+
+  // 2. Gather manager farms if needed
+  const myAssignments = db.assignments.filter(a => a.managerId === user.id && a.isActive);
+  const myManagedFarmIds = myAssignments.map(a => a.farmId);
+
+  // Gather ROI Payouts
+  if (user.role === UserRole.ADMIN) {
+    db.financials.forEach(fin => {
+      const plot = db.plots.find(p => p.id === fin.plotId);
+      const farm = plot ? db.farms.find(f => f.id === plot.farmId) : null;
+      notifications.push({
+        id: `roi-${fin.id}`,
+        type: 'roi_payout',
+        title: 'ROI Payout Published',
+        message: `A payout of $${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for Plot #${plot?.plotNumber || 'N/A'} has been published.`,
+        date: fin.payoutDate || new Date().toISOString(),
+        relatedId: fin.id,
+        meta: {
+          farmId: farm?.id || '',
+          farmName: farm?.name || 'N/A',
+          plotNumber: plot?.plotNumber || 'N/A',
+          roiPercentage: fin.roiPercentage,
+          payoutAmount: fin.payoutAmount,
+          period: fin.period,
+          year: fin.year,
+          status: fin.status
+        }
+      });
+    });
+  } else if (user.role === UserRole.INVESTOR) {
+    // Only where the investor owns the plot
+    const investorFinancials = db.financials.filter(fin => myPlotIds.includes(fin.plotId));
+    investorFinancials.forEach(fin => {
+      const plot = db.plots.find(p => p.id === fin.plotId);
+      const farm = plot ? db.farms.find(f => f.id === plot.farmId) : null;
+      notifications.push({
+        id: `roi-${fin.id}`,
+        type: 'roi_payout',
+        title: 'ROI Payout Received',
+        message: `Your plot #${plot?.plotNumber || 'N/A'} of crop "${plot?.cropType || 'N/A'}" received a payout of $${fin.payoutAmount.toLocaleString()} (${fin.roiPercentage}% ROI) for ${fin.period} ${fin.year}.`,
+        date: fin.payoutDate || new Date().toISOString(),
+        relatedId: fin.id,
+        meta: {
+          farmId: farm?.id || '',
+          farmName: farm?.name || 'N/A',
+          plotNumber: plot?.plotNumber || 'N/A',
+          roiPercentage: fin.roiPercentage,
+          payoutAmount: fin.payoutAmount,
+          period: fin.period,
+          year: fin.year,
+          status: fin.status
+        }
+      });
+    });
+  } // FARM_MANAGER gets 0 ROI payout notifications.
+
+  // Gather Farm Updates
+  db.updates.filter(u => u.isPublished).forEach(u => {
+    let visible = false;
+    if (user.role === UserRole.ADMIN) {
+      visible = true;
+    } else if (user.role === UserRole.FARM_MANAGER) {
+      visible = myManagedFarmIds.includes(u.farmId);
+    } else if (user.role === UserRole.INVESTOR) {
+      const isMyFarm = myInvestorFarmIds.includes(u.farmId);
+      const isTargeted = !u.targetInvestorIds || u.targetInvestorIds.length === 0 || u.targetInvestorIds.includes(user.id);
+      visible = isMyFarm && isTargeted;
+    }
+
+    if (visible) {
+      const farm = db.farms.find(f => f.id === u.farmId);
+      notifications.push({
+        id: `update-${u.id}`,
+        type: 'farm_update',
+        title: u.title,
+        message: `New farm update under category "${u.updateType}" has been posted in ${farm?.name || 'Farm'}.`,
+        date: u.createdAt || new Date().toISOString(),
+        relatedId: u.id,
+        meta: {
+          farmId: u.farmId,
+          farmName: farm?.name || 'N/A',
+          body: u.body,
+          updateType: u.updateType,
+          postedByName: u.postedByName
+        }
+      });
+    }
+  });
+
+  // Gather Documents
+  db.documents.forEach(d => {
+    let visible = false;
+    if (user.role === UserRole.ADMIN) {
+      visible = true;
+    } else if (user.role === UserRole.FARM_MANAGER) {
+      // Must not be sensitive financial doc, and must build on their assigned farm
+      visible = myManagedFarmIds.includes(d.farmId) && d.category !== DocumentCategory.FINANCIAL;
+    } else if (user.role === UserRole.INVESTOR) {
+      const isMyFarm = myInvestorFarmIds.includes(d.farmId);
+      // Farm visibility level OR plot visibility matching their owned plot id
+      const isDocVisible = d.visibility === DocumentVisibility.FARM || (d.plotId && myPlotIds.includes(d.plotId));
+      visible = isMyFarm && isDocVisible;
+    }
+
+    if (visible) {
+      const farm = db.farms.find(f => f.id === d.farmId);
+      notifications.push({
+        id: `doc-${d.id}`,
+        type: 'document_upload',
+        title: `Document Uploaded: ${d.title}`,
+        message: `A new ${d.category} document ("${d.fileName}") was added to ${farm?.name || 'Farm'}.`,
+        date: d.uploadedAt || new Date().toISOString(),
+        relatedId: d.id,
+        meta: {
+          farmId: d.farmId,
+          farmName: farm?.name || 'N/A',
+          category: d.category,
+          fileName: d.fileName,
+          description: d.description,
+          fileUrl: d.fileUrl
+        }
+      });
+    }
+  });
+
+  // Sort by date descending
+  notifications.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  res.json(notifications);
 });
 
 // Reset command (simulates seed_demo)
