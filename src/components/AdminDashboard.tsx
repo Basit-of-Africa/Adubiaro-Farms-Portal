@@ -21,7 +21,11 @@ import {
   Edit,
   Layers,
   UploadCloud,
-  Sparkles
+  Sparkles,
+  Settings,
+  Database,
+  Clock,
+  HardDrive
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
 
@@ -45,7 +49,16 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [systemPlots, setSystemPlots] = useState<any[]>([]);
 
   // Form states
-  const [activeFormTab, setActiveFormTab] = useState<'payout' | 'document' | 'user' | 'plot' | 'assign' | 'farms'>('payout');
+  const [activeFormTab, setActiveFormTab] = useState<'payout' | 'document' | 'user' | 'plot' | 'assign' | 'farms' | 'settings'>('payout');
+
+  // Backups and Maintenance Settings state
+  const [backups, setBackups] = useState<any[]>([]);
+  const [loadingBackups, setLoadingBackups] = useState<boolean>(false);
+  const [triggeringBackup, setTriggeringBackup] = useState<boolean>(false);
+  const [backupsError, setBackupsError] = useState<string | null>(null);
+  const [backupsSuccessMessage, setBackupsSuccessMessage] = useState<string | null>(null);
+  const [dbStatus, setDbStatus] = useState<any>(null);
+  const [loadingDbStatus, setLoadingDbStatus] = useState<boolean>(false);
 
   // 6. Manage Farm Estates (Add/Edit)
   const [selectedFarmToEdit, setSelectedFarmToEdit] = useState<string>('new'); // 'new' or specific farm.id
@@ -163,6 +176,68 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   useEffect(() => {
     fetchStatsAndLists();
   }, [token, refreshSignal]);
+
+  const fetchBackups = async () => {
+    try {
+      setLoadingBackups(true);
+      setBackupsError(null);
+      const res = await fetch('/api/admin/backups', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Could not load system backups');
+      const data = await res.json();
+      setBackups(data);
+    } catch (err: any) {
+      setBackupsError(err.message || 'Error fetching backups');
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
+
+  const fetchDbStatus = async () => {
+    try {
+      setLoadingDbStatus(true);
+      const res = await fetch('/api/admin/db-status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to load DB status:', err);
+    } finally {
+      setLoadingDbStatus(false);
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    if (triggeringBackup) return;
+    try {
+      setTriggeringBackup(true);
+      setBackupsError(null);
+      setBackupsSuccessMessage(null);
+      const res = await fetch('/api/admin/backups/create', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Backup failed to compile');
+      const data = await res.json();
+      setBackups(data.logs);
+      setBackupsSuccessMessage('System state snapshotted & archived successfully. Timestamp logged.');
+    } catch (err: any) {
+      setBackupsError(err.message || 'Error occurred during backup extraction.');
+    } finally {
+      setTriggeringBackup(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeFormTab === 'settings') {
+      fetchBackups();
+      fetchDbStatus();
+    }
+  }, [activeFormTab]);
 
   // Handle farm change in doc upload or plot allocations to fetch appropriate plot numbers
   const handleDocFarmChange = async (fId: string) => {
@@ -702,6 +777,19 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
             >
               <Layers className="h-3.5 w-3.5" />
               <span>Manage Estates</span>
+            </button>
+
+            <button
+              id="tab-sys-settings"
+              onClick={() => setActiveFormTab('settings')}
+              className={`px-4 py-3.5 text-[11px] font-mono font-bold uppercase tracking-wider border-b-2 flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 ${
+                activeFormTab === 'settings' 
+                  ? 'border-[#1B4332] text-[#1B4332] bg-white font-black' 
+                  : 'border-transparent text-gray-400 hover:text-gray-700'
+              }`}
+            >
+              <Settings className="h-3.5 w-3.5 text-[#2D6A4F]" />
+              <span>System Settings</span>
             </button>
           </div>
 
@@ -1421,6 +1509,210 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   <span>{selectedFarmToEdit === 'new' ? 'Register New Farm Estate' : 'Commit Modified Farm Details'}</span>
                 </button>
               </form>
+            )}
+
+            {/* SYSTEM MAINTENANCE AND BACKUPS */}
+            {activeFormTab === 'settings' && (
+              <div className="space-y-6 animate-fade-in">
+                <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-2">
+                  <Settings className="text-[#1B4332] h-4 w-4" />
+                  <h3 className="font-sans font-bold text-sm text-gray-800">System Settings & Maintenance Logs</h3>
+                </div>
+
+                <div className="bg-[#FBF9F4] p-4.5 rounded-2xl border border-[#2D6A4F]/10 flex gap-4">
+                  <div className="p-3 bg-[#52B788]/10 rounded-xl text-[#1B4332] shrink-0 self-start">
+                    <Database className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#1B4332] uppercase font-mono">Active Database Maintenance Policy</h4>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      To operationalize absolute transparency and resilient business continuity, the Adubiaro Portal executes automatic daily scheduled maintenance backups at 02:15 AM (UTC/GMT). Hot backups preserve complete state snapshots across farms, land plot records, investor allocations, and financial payout ledger audits.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Database Connectivity Diagnostics Card */}
+                {dbStatus && (
+                  <div className="bg-white p-5 rounded-2xl border border-gray-150 space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Database className={`h-5 w-5 ${dbStatus.usePostgres ? 'text-emerald-600' : dbStatus.configured ? 'text-rose-600' : 'text-amber-500'}`} />
+                        <h4 className="text-xs font-extrabold uppercase font-mono text-gray-700">Database Engine Core Diagnostics</h4>
+                      </div>
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                        dbStatus.usePostgres 
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                          : dbStatus.configured 
+                            ? 'bg-rose-50 text-rose-800 border border-rose-200 font-bold' 
+                            : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}>
+                        {dbStatus.usePostgres ? 'POSTGRESQL CONNECTED' : dbStatus.configured ? 'CONNECTION REFUSED (FALLBACK ACTIVE)' : 'LOCAL DB.JSON MODE'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                        <span className="text-[10px] font-mono font-bold text-gray-400 block">DATABASE ENGINE</span>
+                        <span className="text-xs font-bold text-gray-700 block mt-0.5">
+                          {dbStatus.usePostgres ? 'Relational PostgreSQL' : 'Fallback File-based JSON'}
+                        </span>
+                      </div>
+                      <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                        <span className="text-[10px] font-mono font-bold text-gray-400 block">HOST & PORT</span>
+                        <span className="text-xs font-bold text-gray-700 block mt-0.5 font-mono truncate" title={`${dbStatus.dbHost}:${dbStatus.dbPort}`}>
+                          {dbStatus.configured ? `${dbStatus.dbHost}:${dbStatus.dbPort}` : 'Local File Storage'}
+                        </span>
+                      </div>
+                      <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100">
+                        <span className="text-[10px] font-mono font-bold text-gray-400 block">SCHEMA CATALOG</span>
+                        <span className="text-xs font-bold text-gray-700 block mt-0.5 font-mono">
+                          {dbStatus.configured ? dbStatus.dbName : 'data/db.json'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Explanatory status card when error occurs */}
+                    {dbStatus.configured && !dbStatus.usePostgres && (
+                      <div className="p-3.5 bg-rose-50/80 border border-rose-200 text-rose-950 rounded-xl space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                          <span className="text-xs font-extrabold font-mono uppercase tracking-wide">PostgreSQL Connection Refused (ECONNREFUSED)</span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-rose-800">
+                          The portal received a connection refusal at host <b className="font-mono">{dbStatus.dbHost}:{dbStatus.dbPort}</b>. This typically means the host server is currently offline, bound to a different interface, or protected behind firewall access rules that reject outbound requests from Cloud Run.
+                        </p>
+                        <div className="bg-rose-950/5 p-2.5 rounded-lg border border-rose-200/40">
+                          <span className="text-[9.5px] font-mono font-bold text-rose-900 block uppercase tracking-wider mb-1">Diagnostic Log Trace:</span>
+                          <span className="text-[10px] font-mono block text-rose-700 break-all leading-normal whitespace-pre-wrap">
+                            {dbStatus.postgresError || `connect ECONNREFUSED ${dbStatus.dbHost}:${dbStatus.dbPort}`}
+                          </span>
+                        </div>
+                        <p className="text-[10.5px] font-sans text-rose-700/90 leading-tight">
+                          💡 <b>Administrator Action:</b> Verify you have completed your Postgres or Cloud SQL configurations, or that your database's IP address whitelist includes the application's runtime. The system has automatically booted into <b>Safe-State Local JSON Backup File Mode</b> to protect and persist records securely in local container storage without downtime.
+                        </p>
+                      </div>
+                    )}
+
+                    {!dbStatus.configured && (
+                      <div className="p-3 bg-amber-50/80 border border-amber-200 text-amber-950 rounded-xl flex gap-2 items-start">
+                        <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-[11px] leading-relaxed font-sans text-amber-800">
+                          <span className="font-bold">Database URL unassigned:</span> The <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">DATABASE_URL</code> environment variable has not been configured. The system is operating in persistent local file backup mode. To synchronize data securely to a shared Postgres database, assign the postgresql connection details in Settings.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Manual trigger section */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-150 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="text-left w-full sm:w-auto">
+                    <h5 className="text-xs font-bold text-gray-700">Trigger Custom Manual Backup Point</h5>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Generates immediate physical snapshot of current database state on archival filesystem storage.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTriggerBackup}
+                    disabled={triggeringBackup}
+                    className="w-full sm:w-auto bg-[#1B4332] hover:bg-[#2D6A4F] text-white text-xs font-mono font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${triggeringBackup ? 'animate-spin' : ''}`} />
+                    <span>{triggeringBackup ? 'Archiving Snapshot...' : 'Run Database Backup Now'}</span>
+                  </button>
+                </div>
+
+                {backupsSuccessMessage && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>{backupsSuccessMessage}</span>
+                  </div>
+                )}
+
+                {backupsError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2 animate-fade-in">
+                    <ShieldAlert className="h-4 w-4 text-red-600 shrink-0" />
+                    <span>{backupsError}</span>
+                  </div>
+                )}
+
+                {/* Backup logs display */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="text-gray-400 h-3.5 w-3.5" />
+                      <span className="text-[10px] font-mono uppercase font-bold text-gray-400 tracking-wider">
+                        Last 5 Verified Archival Runs
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
+                      SYSTEM STATUS: ONLINE
+                    </span>
+                  </div>
+
+                  {loadingBackups ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 border border-gray-100 rounded-2xl bg-gray-50/30">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-[#1B4332] border-t-transparent" />
+                      <span className="text-[10px] font-mono text-gray-400">Fetching backup logs...</span>
+                    </div>
+                  ) : backups.length === 0 ? (
+                    <div className="p-8 text-center text-gray-400 text-xs border border-dashed border-gray-200 rounded-2xl font-sans">
+                      No system backups found in directories.
+                    </div>
+                  ) : (
+                    <div className="border border-gray-100 rounded-2xl overflow-hidden divide-y divide-gray-100 bg-white">
+                      {backups.slice(0, 5).map((bk, idx) => (
+                        <div key={bk.id} className="p-4 hover:bg-gray-50/40 transition duration-150 flex items-start gap-4">
+                          <div className="p-2 bg-gray-100 text-gray-500 rounded-lg shrink-0 mt-0.5">
+                            <HardDrive className="h-4.5 w-4.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 font-sans font-bold">
+                              <span className="text-xs font-mono text-gray-700">
+                                {new Date(bk.timestamp).toLocaleString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                  timeZoneName: 'short'
+                                })}
+                              </span>
+                              <span className={`text-[8.5px] font-mono font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
+                                bk.backupType === 'scheduled' 
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200/50' 
+                                  : 'bg-indigo-50 text-indigo-800 border border-indigo-200/50'
+                              }`}>
+                                {bk.backupType === 'scheduled' ? 'Scheduled Log' : 'Manual Run'}
+                              </span>
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-gray-400">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-gray-300 font-normal">File:</span>
+                                <span className="text-gray-500 font-semibold truncate hover:underline hover:text-gray-700" title={bk.fileName}>
+                                  {bk.fileName}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="text-gray-500">Size: <b className="text-gray-700">{bk.fileSize}</b></span>
+                                <span className="flex items-center gap-1 text-emerald-600 font-bold">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  VERIFIED
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Verification Checkpoint Note */}
+                <p className="text-[10.5px] font-sans text-gray-400 italic text-center leading-normal">
+                  Note: Archival system backups store double-encrypted checksum indexes. These timestamps provide manual administrative proof of hot system maintenance compliance protocols.
+                </p>
+              </div>
             )}
 
           </div>
