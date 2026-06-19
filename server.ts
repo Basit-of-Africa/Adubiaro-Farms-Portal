@@ -778,6 +778,18 @@ function loadLocalJsonDb() {
   }
 }
 
+// Helper to verify if PostgreSQL is actively configured and has a valid URL
+function isPostgresConfigured(): boolean {
+  const dbUrl = process.env.DATABASE_URL;
+  return !!(dbUrl && 
+    dbUrl !== 'undefined' && 
+    dbUrl !== 'null' && 
+    dbUrl.trim() && 
+    dbUrl !== 'YOUR_DATABASE_URL' && 
+    dbUrl !== 'DATABASE_URL_HERE' &&
+    !dbUrl.includes('db.example.com'));
+}
+
 // Main integration initialization for PostgreSQL
 async function initPostgres() {
   // Load local database config first to determine settings-based overrides
@@ -790,12 +802,12 @@ async function initPostgres() {
     return;
   }
 
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl || dbUrl === 'undefined' || dbUrl === 'null' || !dbUrl.trim() || dbUrl === 'YOUR_DATABASE_URL') {
-    console.log('⚠️ DATABASE_URL not set or set to dummy value. Running in local JSON file mode.');
+  if (!isPostgresConfigured()) {
+    console.log('💡 DATABASE_URL not set or set to dummy value. Running in local JSON file mode.');
     usePostgres = false;
     return;
   }
+
 
   try {
     console.log('🔌 Connecting to PostgreSQL database...');
@@ -1008,10 +1020,16 @@ async function initPostgres() {
     postgresError = null;
     console.log(`✅ Loaded ${db.users.length} users, ${db.farms.length} estates, ${db.plots.length} plots from PostgreSQL!`);
   } catch (err: any) {
-    console.error('❌ Failed to initialize PostgreSQL connection:', err);
-    console.log('⚠️ Running in backup Local JSON DB mode.');
     usePostgres = false;
     postgresError = err instanceof Error ? err.stack || err.message : String(err);
+    
+    const settings = getSettings();
+    if (settings.databaseMode === 'postgres_forced') {
+      console.error('❌ Failed to initialize PostgreSQL connection in FORCED database mode:', err);
+    } else {
+      console.log(`💡 Note: PostgreSQL is not reachable, seamlessly continuing in persistent Local JSON DB mode: ${err.message || err}`);
+      console.log('⚠️ Running in backup Local JSON DB mode.');
+    }
     loadLocalJsonDb();
   }
 }
@@ -2267,7 +2285,7 @@ app.get('/api/admin/db-status', requireAuth, (req, res) => {
   let dbHost = 'N/A';
   let dbPort = '5432';
   let dbName = 'N/A';
-  if (process.env.DATABASE_URL) {
+  if (isPostgresConfigured() && process.env.DATABASE_URL) {
     try {
       const parseUrl = new URL(process.env.DATABASE_URL);
       dbHost = parseUrl.hostname;
@@ -2289,7 +2307,7 @@ app.get('/api/admin/db-status', requireAuth, (req, res) => {
     dbHost,
     dbPort,
     dbName,
-    configured: !!process.env.DATABASE_URL
+    configured: isPostgresConfigured()
   });
 });
 
@@ -2326,7 +2344,7 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
   if (currentSettings.databaseMode === 'local_json') {
     usePostgres = false;
   } else if (currentSettings.databaseMode === 'postgres_forced' || currentSettings.databaseMode === 'auto') {
-    if (!usePostgres && process.env.DATABASE_URL) {
+    if (!usePostgres && isPostgresConfigured()) {
       initPostgres().catch(err => console.error('Failed to rebuild Postgres connection during settings shift:', err));
     }
   }
