@@ -96,19 +96,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-mono text-gray-400 uppercase mb-1.5 font-bold tracking-wider">Authorized Account ID</label>
+              <label className="block text-xs font-mono text-[#2D6A4F] uppercase mb-1.5 font-bold tracking-wider">Username</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-gray-400">
-                  <Mail className="h-4 w-4 text-[#2D6A4F]/50" />
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#2D6A4F]/60">
+                  <Mail className="h-4 w-4" />
                 </span>
                 <input
                   id="id-username"
                   type="text"
                   required
-                  placeholder="admin / manager1 / investor1"
+                  placeholder="Username (e.g. admin, manager1)"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-150 focus:outline-none focus:ring-2 focus:ring-[#1B4332] focus:border-transparent text-sm bg-[#FBF9F4]/40 font-medium transition duration-200"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#1B4332]/20 focus:border-[#1B4332] text-sm bg-white font-medium transition-all duration-200 outline-none shadow-sm focus:shadow-md"
                 />
               </div>
             </div>
