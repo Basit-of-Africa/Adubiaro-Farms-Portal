@@ -637,7 +637,7 @@ export default function QuickActions({ user, token, onTabChange, onRefresh }: Qu
               )}
 
               {/* Modal Body Forms */}
-              <div className="p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
+              <div className="p-6 overflow-y-auto max-h-[70vh] md:max-h-[calc(100vh-220px)]">
                 
                 {/* 1. PAYOUT FORM */}
                 {activeModal === 'payout' && (

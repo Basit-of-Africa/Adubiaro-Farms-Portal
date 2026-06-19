@@ -81,10 +81,10 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
           <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto font-sans leading-relaxed">Modify database records via the admin or managers hubs to witness dynamic email streams.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-[600px] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 h-auto lg:h-[600px] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           
           {/* List panel - Left 5 cols */}
-          <div className="lg:col-span-5 border-r border-gray-100 flex flex-col h-full bg-gray-50/50">
+          <div className="lg:col-span-12 xl:col-span-5 lg:col-span-5 border-b lg:border-b-0 lg:border-r border-gray-100 flex flex-col h-[280px] lg:h-full bg-gray-50/50">
             <div className="p-4 border-b border-gray-100 bg-white">
               <h3 className="text-xs font-mono font-bold text-gray-400 uppercase tracking-wider">Outbox Stream ({emails.length})</h3>
             </div>
@@ -117,7 +117,7 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
           </div>
 
           {/* Render Panel - Right 7 cols */}
-          <div className="lg:col-span-7 flex flex-col h-full">
+          <div className="lg:col-span-12 xl:col-span-7 lg:col-span-7 flex flex-col h-[320px] lg:h-full">
             {selectedEmail ? (
               <div className="flex flex-col h-full bg-white divide-y divide-gray-100">
                 {/* Email headers */}

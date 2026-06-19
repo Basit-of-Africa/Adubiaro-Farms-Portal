@@ -50,7 +50,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
   return (
     <aside 
       id="portal-sidebar" 
-      className={`fixed top-0 left-0 w-[280px] h-screen bg-gradient-to-b from-[#0F291E] via-[#143427] to-[#0E251B] text-white flex flex-col justify-between border-r border-[#2D6A4F]/20 z-40 shadow-2xl transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`fixed top-0 left-0 w-[280px] h-screen bg-gradient-to-b from-[#0F291E] via-[#143427] to-[#0E251B] text-white flex flex-col justify-between border-r border-[#2D6A4F]/20 z-50 shadow-2xl transition-transform duration-300 lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
     >
       {/* Sidebar Header & Brand */}
       <div className="p-6 relative">

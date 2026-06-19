@@ -878,7 +878,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Select plot</label>
                     <select
@@ -943,7 +943,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400"> payout Date</label>
                     <input
@@ -1005,7 +1005,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Target farm</label>
                     <select
@@ -1032,7 +1032,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Document category</label>
                     <select
@@ -1124,7 +1124,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Full client name</label>
                     <input
@@ -1150,7 +1150,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Email address</label>
                     <input
@@ -1214,7 +1214,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Select estate farm</label>
                     <select
@@ -1241,7 +1241,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Plot size (hectares)</label>
                     <input
@@ -1279,7 +1279,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Link to Investor</label>
                     <select
@@ -1396,7 +1396,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Estate name</label>
                     <input
@@ -1420,7 +1420,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Location city / area</label>
                     <input

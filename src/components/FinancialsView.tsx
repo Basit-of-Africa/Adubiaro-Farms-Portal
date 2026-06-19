@@ -165,7 +165,7 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         <div className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium hover:shadow-premium-hover transition duration-300 flex items-center gap-4">
           <div className="p-3.5 bg-emerald-50 text-[#1B4332] rounded-xl">

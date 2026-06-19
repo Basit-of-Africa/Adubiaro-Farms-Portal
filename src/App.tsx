@@ -198,7 +198,7 @@ export default function App() {
       {/* Mobile Sidebar backdrop */}
       {isSidebarOpen && (
         <div 
-          className="fixed inset-0 bg-[#07140e]/60 backdrop-blur-sm z-30 lg:hidden transition-all duration-300 pointer-events-auto"
+          className="fixed inset-0 bg-[#07140e]/60 backdrop-blur-sm z-45 lg:hidden transition-all duration-300 pointer-events-auto"
           onClick={() => setIsSidebarOpen(false)}
           aria-hidden="true"
         />

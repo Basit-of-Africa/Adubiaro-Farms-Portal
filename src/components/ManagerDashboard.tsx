@@ -292,7 +292,7 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
               )}
 
               <form onSubmit={handlePostUpdate} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400 tracking-wider">Update title</label>
                     <input
@@ -402,7 +402,7 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400 tracking-wider">Attach Field Photo</label>
                     <input
@@ -449,7 +449,7 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
               )}
 
               <form onSubmit={handleUploadDocument} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400 tracking-wider">Document Title</label>
                     <input
