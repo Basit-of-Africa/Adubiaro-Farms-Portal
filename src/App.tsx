@@ -14,6 +14,7 @@ import FinancialsView from './components/FinancialsView';
 import EmailOutbox from './components/EmailOutbox';
 import NotificationBell from './components/NotificationBell';
 import SettingsView from './components/SettingsView';
+import QuickActions from './components/QuickActions';
 import { User, UserRole } from './types';
 import { 
   Sprout, 
@@ -298,6 +299,14 @@ export default function App() {
 
         </main>
       </div>
+
+      {/* Dynamic Role-Based Floating Quick Actions Menu */}
+      <QuickActions 
+        user={currentUser} 
+        token={authToken} 
+        onTabChange={setActiveTab} 
+        onRefresh={triggerRefreshSignal} 
+      />
     </div>
   );
 }
