@@ -14,8 +14,7 @@ import pg from 'pg';
 import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
-import { initializeApp as initializeFirebaseApp } from 'firebase/app';
-import { initializeFirestore, doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore';
+import { Firestore } from '@google-cloud/firestore';
 import {
   User,
   UserRole,
@@ -425,12 +424,12 @@ try {
   }
 
   if (firebaseConfig) {
-    const fApp = initializeFirebaseApp(firebaseConfig);
     const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID || '(default)';
-    firestoreDb = initializeFirestore(fApp, {
-      experimentalForceLongPolling: true
-    }, dbId);
-    console.log(`✅ Firebase Firestore client successfully initialized on database: "${dbId}" with long-polling force enablement.`);
+    firestoreDb = new Firestore({
+      projectId: firebaseConfig.projectId,
+      databaseId: dbId,
+    });
+    console.log(`✅ Firebase Firestore server SDK client successfully initialized on database: "${dbId}".`);
   } else {
     console.warn('⚠️ No Firebase configuration found (neither env vars nor JSON config). Firestore cloud backing disabled.');
   }
@@ -457,9 +456,9 @@ async function loadDbFromFirestore() {
 
     let loadedSomething = false;
     for (const col of collectionsToLoad) {
-      const querySnapshot = await getDocs(collection(firestoreDb, col.name));
+      const querySnapshot = await firestoreDb.collection(col.name).get();
       const items: any[] = [];
-      querySnapshot.forEach((docSnapshot) => {
+      querySnapshot.forEach((docSnapshot: any) => {
         items.push({ id: docSnapshot.id, ...docSnapshot.data() });
       });
       if (items.length > 0) {
@@ -471,8 +470,8 @@ async function loadDbFromFirestore() {
     }
 
     // Load settings
-    const settingsDoc = await getDoc(doc(firestoreDb, 'settings', 'standalone'));
-    if (settingsDoc.exists()) {
+    const settingsDoc = await firestoreDb.collection('settings').doc('standalone').get();
+    if (settingsDoc && settingsDoc.exists) {
       db.settings = settingsDoc.data() as SystemSettings;
       loadedSomething = true;
     }
@@ -509,14 +508,14 @@ async function saveDbToFirestore() {
           const { id, ...data } = item;
           // Prevent setting undefined values in Firestore
           const cleanData = JSON.parse(JSON.stringify(data));
-          await setDoc(doc(firestoreDb, col.name, item.id), cleanData);
+          await firestoreDb.collection(col.name).doc(item.id).set(cleanData);
         }
       }
     }
 
     if (db.settings) {
       const cleanSettings = JSON.parse(JSON.stringify(db.settings));
-      await setDoc(doc(firestoreDb, 'settings', 'standalone'), cleanSettings);
+      await firestoreDb.collection('settings').doc('standalone').set(cleanSettings);
     }
     console.log('✅ Synchronized memory DB state to Firestore successfully.');
   } catch (err) {

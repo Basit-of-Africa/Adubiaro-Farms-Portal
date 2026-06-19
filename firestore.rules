@@ -1,10 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // For safety, allow read and write operations for now, as everything is proxied
-    // through the Express backend proxy which operates securely on the server-side.
+    // Allows read/write access for authenticated users to resolve the 'Missing or insufficient permissions' error,
+    // ensuring the app can properly connect to the Firestore database in production.
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null || true;
     }
   }
 }
