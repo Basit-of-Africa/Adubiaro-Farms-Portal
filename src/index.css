@@ -4,15 +4,43 @@
 @theme {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Montserrat", ui-serif, Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-mono: "Montserrat", ui-sans-serif, system-ui, sans-serif;
 
   --shadow-premium: 0 10px 30px -5px rgba(27, 67, 50, 0.08), 0 4px 12px -2px rgba(27, 67, 50, 0.03);
   --shadow-premium-hover: 0 20px 40px -10px rgba(27, 67, 50, 0.14), 0 8px 16px -4px rgba(27, 67, 50, 0.05);
 }
 
 @layer base {
+  *, *::before, *::after {
+    font-family: "Montserrat", sans-serif !important;
+  }
+
   body {
     @apply font-sans bg-[#FBF9F4] text-[#2c3e35] antialiased;
+    font-size: 15.5px !important;
+    line-height: 1.6 !important;
+  }
+}
+
+/* Ensure minimum font sizes and increased line heights for maximum text readability */
+@layer utilities {
+  .text-\[9px\], 
+  .text-\[9\.5px\], 
+  .text-\[10px\], 
+  .text-\[11px\] {
+    font-size: 12.5px !important; /* Uplift microscopic labels so they are instantly legible */
+    letter-spacing: 0.03em !important;
+    line-height: 1.4 !important;
+  }
+  
+  .text-xs {
+    font-size: 13.5px !important; /* Scale tiny text from 12px to 13.5px */
+    line-height: 1.45 !important;
+  }
+  
+  .text-sm {
+    font-size: 14.5px !important; /* Scale regular small text from 14px to 14.5px */
+    line-height: 1.5 !important;
   }
 }
 
