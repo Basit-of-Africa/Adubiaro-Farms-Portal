@@ -14,6 +14,8 @@ import pg from 'pg';
 import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
+import { initializeApp as initializeFirebaseApp } from 'firebase/app';
+import { initializeFirestore, doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore';
 import {
   User,
   UserRole,
@@ -392,6 +394,152 @@ function getInitialDb(): DatabaseSchema {
 }
 
 let db: DatabaseSchema = getInitialDb();
+
+// Initialize Firebase Firestore client from config
+let firestoreDb: any = null;
+try {
+  let firebaseConfig: any = null;
+  const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+
+  if (process.env.FIREBASE_CONFIG) {
+    try {
+      firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+      console.log('🔄 Initializing Firebase using FIREBASE_CONFIG environment variable...');
+    } catch (err) {
+      console.error('❌ Failed to parse FIREBASE_CONFIG environment variable:', err);
+    }
+  } else if (process.env.FIREBASE_API_KEY && process.env.FIREBASE_PROJECT_ID) {
+    console.log('🔄 Initializing Firebase using individual environment variables...');
+    firebaseConfig = {
+      apiKey: process.env.FIREBASE_API_KEY,
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || `${process.env.FIREBASE_PROJECT_ID}.firebaseapp.com`,
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.firebasestorage.app`,
+      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.FIREBASE_APP_ID,
+      firestoreDatabaseId: process.env.FIREBASE_DATABASE_ID
+    };
+  } else if (fs.existsSync(firebaseConfigPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8'));
+    console.log('🔄 Initializing Firebase using firebase-applet-config.json file...');
+  }
+
+  if (firebaseConfig) {
+    const fApp = initializeFirebaseApp(firebaseConfig);
+    const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID || '(default)';
+    firestoreDb = initializeFirestore(fApp, {
+      experimentalForceLongPolling: true
+    }, dbId);
+    console.log(`✅ Firebase Firestore client successfully initialized on database: "${dbId}" with long-polling force enablement.`);
+  } else {
+    console.warn('⚠️ No Firebase configuration found (neither env vars nor JSON config). Firestore cloud backing disabled.');
+  }
+} catch (e) {
+  console.error('❌ Failed to initialize Firebase Firestore:', e);
+}
+
+// Helper to load complete memory db state from Firestore collections
+async function loadDbFromFirestore() {
+  if (!firestoreDb) return;
+  console.log('🔄 Loading persisted state from Firebase Firestore...');
+  try {
+    const collectionsToLoad = [
+      { name: 'users', key: 'users' },
+      { name: 'farms', key: 'farms' },
+      { name: 'plots', key: 'plots' },
+      { name: 'investorPlots', key: 'investorPlots' },
+      { name: 'assignments', key: 'assignments' },
+      { name: 'updates', key: 'updates' },
+      { name: 'documents', key: 'documents' },
+      { name: 'financials', key: 'financials' },
+      { name: 'simulatedEmails', key: 'simulatedEmails' }
+    ];
+
+    let loadedSomething = false;
+    for (const col of collectionsToLoad) {
+      const querySnapshot = await getDocs(collection(firestoreDb, col.name));
+      const items: any[] = [];
+      querySnapshot.forEach((docSnapshot) => {
+        items.push({ id: docSnapshot.id, ...docSnapshot.data() });
+      });
+      if (items.length > 0) {
+        (db as any)[col.key] = items;
+        loadedSomething = true;
+      } else {
+        (db as any)[col.key] = [];
+      }
+    }
+
+    // Load settings
+    const settingsDoc = await getDoc(doc(firestoreDb, 'settings', 'standalone'));
+    if (settingsDoc.exists()) {
+      db.settings = settingsDoc.data() as SystemSettings;
+      loadedSomething = true;
+    }
+
+    if (loadedSomething) {
+      console.log('✅ Loaded data successfully from Firestore!');
+    } else {
+      console.log('ℹ️ Firestore database is empty.');
+    }
+  } catch (err) {
+    console.error('❌ Error reading from Firestore:', err);
+  }
+}
+
+// Helper to fully synchronize memory DB state to corresponding Firestore paths
+async function saveDbToFirestore() {
+  if (!firestoreDb) return;
+  try {
+    const collectionsToSave = [
+      { name: 'users', list: db.users },
+      { name: 'farms', list: db.farms },
+      { name: 'plots', list: db.plots },
+      { name: 'investorPlots', list: db.investorPlots },
+      { name: 'assignments', list: db.assignments },
+      { name: 'updates', list: db.updates },
+      { name: 'documents', list: db.documents },
+      { name: 'financials', list: db.financials },
+      { name: 'simulatedEmails', list: db.simulatedEmails }
+    ];
+
+    for (const col of collectionsToSave) {
+      for (const item of col.list) {
+        if (item && item.id) {
+          const { id, ...data } = item;
+          // Prevent setting undefined values in Firestore
+          const cleanData = JSON.parse(JSON.stringify(data));
+          await setDoc(doc(firestoreDb, col.name, item.id), cleanData);
+        }
+      }
+    }
+
+    if (db.settings) {
+      const cleanSettings = JSON.parse(JSON.stringify(db.settings));
+      await setDoc(doc(firestoreDb, 'settings', 'standalone'), cleanSettings);
+    }
+    console.log('✅ Synchronized memory DB state to Firestore successfully.');
+  } catch (err) {
+    console.error('❌ Error synchronizing memory DB to Firestore:', err);
+  }
+}
+
+async function initFirestore() {
+  if (!firestoreDb) return;
+  try {
+    await loadDbFromFirestore();
+    
+    // Check if db is completely empty
+    if (db.users.length === 0) {
+      console.log('🌱 Firestore is empty. Initializing and seeding Firestore database...');
+      db = getInitialDb();
+      await saveDbToFirestore();
+      console.log('✅ Firestore seeded successfully.');
+    }
+  } catch (err) {
+    console.error('❌ Failed to initialize/sync Firestore database:', err);
+  }
+}
 
 function getSettings(): SystemSettings {
   if (!db.settings) {
@@ -1027,10 +1175,12 @@ async function initPostgres() {
     if (settings.databaseMode === 'postgres_forced') {
       console.error('❌ Failed to initialize PostgreSQL connection in FORCED database mode:', err);
     } else {
-      console.log(`💡 Note: PostgreSQL is not reachable, seamlessly continuing in persistent Local JSON DB mode: ${err.message || err}`);
-      console.log('⚠️ Running in backup Local JSON DB mode.');
+      console.log(`💡 Note: PostgreSQL is not reachable, seamlessly continuing in persistent Cloud/Local database mode: ${err.message || err}`);
     }
-    loadLocalJsonDb();
+    // Fall back to local JSON file only if Firestore failed to retrieve any user data
+    if (db.users.length === 0) {
+      loadLocalJsonDb();
+    }
   }
 }
 
@@ -1040,6 +1190,13 @@ function saveDb() {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   } catch (err) {
     console.error('❌ Failed to save local file-based DB copy:', err);
+  }
+
+  // Push updates to Firestore
+  if (firestoreDb) {
+    saveDbToFirestore().catch(err => {
+      console.error('❌ Failed to synchronize database changes with Firestore:', err);
+    });
   }
 
   // Push updates to PostgreSQL if activated
@@ -2388,6 +2545,7 @@ app.get('/api/portal/settings', (req, res) => {
 
 // INTEGRATE VITE NODE DEV SERVER MIDDLEWARE
 async function startServer() {
+  await initFirestore();
   await initPostgres();
 
   if (process.env.NODE_ENV !== 'production') {

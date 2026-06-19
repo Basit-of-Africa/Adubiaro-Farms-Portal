@@ -1,0 +1,211 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "FARM_MANAGER", "INVESTOR"] },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "username", "role", "email", "name"]
+    },
+    "Farm": {
+      "title": "Farm",
+      "description": "Details about a managed estate",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "state": { "type": "string" },
+        "totalPlots": { "type": "integer" },
+        "totalHectares": { "type": "number" },
+        "description": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "dateEstablished": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "name", "location", "state"]
+    },
+    "FarmPlot": {
+      "title": "FarmPlot",
+      "description": "Individual parcel/plot unit inside a farm estate",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "farmId": { "type": "string" },
+        "plotNumber": { "type": "string" },
+        "sizeHectares": { "type": "number" },
+        "cropType": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "farmId", "plotNumber", "sizeHectares", "cropType", "status"]
+    },
+    "InvestorPlot": {
+      "title": "InvestorPlot",
+      "description": "Ownership mapping of plots to specific investors",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "investorId": { "type": "string" },
+        "plotId": { "type": "string" },
+        "investmentAmount": { "type": "number" },
+        "ownershipPercentage": { "type": "number" },
+        "startDate": { "type": "string" },
+        "contractRef": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "investorId", "plotId", "investmentAmount", "ownershipPercentage", "startDate"]
+    },
+    "FarmManagerAssignment": {
+      "title": "FarmManagerAssignment",
+      "description": "Managers assigned to oversee farms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "managerId": { "type": "string" },
+        "farmId": { "type": "string" },
+        "assignedDate": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "managerId", "farmId", "assignedDate", "isActive"]
+    },
+    "FarmUpdate": {
+      "title": "FarmUpdate",
+      "description": "Blog reports and operation milestones posted by admins/managers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "farmId": { "type": "string" },
+        "postedBy": { "type": "string" },
+        "postedByName": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "updateType": { "type": "string" },
+        "targetInvestorIds": { "type": "array" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "photos": { "type": "array" }
+      },
+      "required": ["id", "farmId", "postedBy", "postedByName", "title", "body", "updateType", "isPublished", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "Legal certificates, EIA, or digital contract files",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "farmId": { "type": "string" },
+        "plotId": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "uploadedByName": { "type": "string" },
+        "title": { "type": "string" },
+        "fileUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "category": { "type": "string" },
+        "visibility": { "type": "string" },
+        "description": { "type": "string" },
+        "uploadedAt": { "type": "string" }
+      },
+      "required": ["id", "farmId", "uploadedBy", "uploadedByName", "title", "fileUrl", "fileName", "category", "visibility", "uploadedAt"]
+    },
+    "FinancialSummary": {
+      "title": "FinancialSummary",
+      "description": "Histories of quarterly dividends, revenues, and payout audits",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "plotId": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "period": { "type": "string" },
+        "year": { "type": "integer" },
+        "roiPercentage": { "type": "number" },
+        "payoutAmount": { "type": "number" },
+        "payoutDate": { "type": "string" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "plotId", "uploadedBy", "period", "year", "payoutDate", "status"]
+    },
+    "SimulatedEmail": {
+      "title": "SimulatedEmail",
+      "description": "Outgoing email copies saved in the notification outbox logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "to": { "type": "string" },
+        "subject": { "type": "string" },
+        "body": { "type": "string" },
+        "htmlBody": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "required": ["id", "to", "subject", "body", "sentAt", "category"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Persistent system and portal preference configs",
+      "type": "object",
+      "properties": {
+        "databaseMode": { "type": "string" },
+        "simulatedLatency": { "type": "integer" },
+        "enableNotifications": { "type": "boolean" },
+        "enableEmailSimulation": { "type": "boolean" },
+        "minimumPayoutRoi": { "type": "number" },
+        "allowedCrops": { "type": "array" },
+        "portalName": { "type": "string" },
+        "logoText": { "type": "string" },
+        "accentColor": { "type": "string" },
+        "announcementBanner": { "type": "string" },
+        "bannerType": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user records"
+    },
+    "/farms/{farmId}": {
+      "schema": "Farm",
+      "description": "Collection of farm estates"
+    },
+    "/plots/{plotId}": {
+      "schema": "FarmPlot",
+      "description": "Collection of plot parcel registers"
+    },
+    "/investorPlots/{investorPlotId}": {
+      "schema": "InvestorPlot",
+      "description": "Collection of investor plot mappings"
+    },
+    "/assignments/{assignmentId}": {
+      "schema": "FarmManagerAssignment",
+      "description": "Collection of manager farm assignments"
+    },
+    "/updates/{updateId}": {
+      "schema": "FarmUpdate",
+      "description": "Collection of periodic reports and milestones"
+    },
+    "/documents/{documentId}": {
+      "schema": "Document",
+      "description": "Collection of PDF documents & deeds"
+    },
+    "/financials/{financialId}": {
+      "schema": "FinancialSummary",
+      "description": "Collection of quarterly dividends and yields"
+    },
+    "/simulatedEmails/{emailId}": {
+      "schema": "SimulatedEmail",
+      "description": "Collection of outbox logs for notification emails"
+    },
+    "/settings/standalone": {
+      "schema": "SystemSettings",
+      "description": "Single document containing system properties"
+    }
+  }
+}
