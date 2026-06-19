@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Montserrat", ui-serif, Georgia, serif;
@@ -16,7 +18,7 @@
   }
 
   body {
-    @apply font-sans bg-[#FBF9F4] text-[#2c3e35] antialiased;
+    @apply font-sans bg-[#FBF9F4] dark:bg-stone-950 text-[#2c3e35] dark:text-stone-200 antialiased transition-colors duration-300;
     font-size: 15.5px !important;
     line-height: 1.6 !important;
   }

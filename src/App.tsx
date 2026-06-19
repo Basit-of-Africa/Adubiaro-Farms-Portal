@@ -28,7 +28,9 @@ import {
   Heart,
   ExternalLink,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export default function App() {
@@ -37,10 +39,23 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedFarmId, setSelectedFarmId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('theme') === 'dark';
+  });
   
   // Refresh signals allowing children tables to update whenever operations forms are saved
   const [refreshSignal, setRefreshSignal] = useState<number>(0);
   const triggerRefreshSignal = () => setRefreshSignal((prev) => prev + 1);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
   const [portalSettings, setPortalSettings] = useState<any>({
     portalName: 'Adubiaro Farm Portal',
@@ -111,16 +126,16 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBF9F4] text-[#2c3e35] font-sans flex flex-col antialiased">
+    <div className="min-h-screen bg-[#FBF9F4] dark:bg-stone-950 text-[#2c3e35] dark:text-stone-200 font-sans flex flex-col antialiased transition-colors duration-300">
       
       {/* Portal Announcement Banner */}
       {portalSettings?.announcementBanner && portalSettings?.bannerType !== 'none' && (
         <div id="portal-announcement-banner" className={`text-center py-2 px-4 text-xs font-semibold flex items-center justify-center gap-2 select-none shadow-sm transition border-b leading-tight z-40 ${
           portalSettings.bannerType === 'info' 
-            ? 'bg-blue-50 text-blue-800 border-blue-200'
+            ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900/40'
             : portalSettings.bannerType === 'warning'
-              ? 'bg-amber-50 text-amber-800 border-amber-200'
-              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900/40'
+              : 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-950/40'
         }`}>
           <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse shrink-0" />
           <span><b>ANNOUNCEMENT:</b> {portalSettings.announcementBanner}</span>
@@ -148,6 +163,16 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Mobile Theme Toggle Button */}
+          <button
+            id="mobile-theme-toggle"
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-1.5 hover:bg-white/10 rounded-xl text-gray-300 hover:text-[#52B788] transition cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center"
+            title="Toggle Light/Dark Theme"
+          >
+            {isDarkMode ? <Sun className="h-5 w-5 text-[#52B788]" /> : <Moon className="h-5 w-5 text-gray-300" />}
+          </button>
+          
           <div className="text-[9px] font-mono tracking-wider bg-white/5 border border-white/10 px-2.5 py-1.5 rounded-full uppercase text-[#52B788] font-bold">
             {currentUser.role.split('_').join(' ')}
           </div>
@@ -184,20 +209,31 @@ export default function App() {
         <main id="main-content" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full">
         
         {/* Desktop Top Header Bar with Live Alerts */}
-        <div className="hidden lg:flex justify-between items-center bg-white border border-[#2D6A4F]/10 px-6 py-4.5 rounded-3xl shadow-premium">
+        <div className="hidden lg:flex justify-between items-center bg-white dark:bg-stone-900 border border-[#2D6A4F]/10 dark:border-stone-800 px-6 py-4.5 rounded-3xl shadow-premium transition-colors duration-300">
           <div>
-            <span className="text-[10px] font-mono font-bold text-[#2D6A4F]/60 uppercase tracking-widest">Active Secure Session</span>
-            <h2 className="font-serif font-extrabold text-[#1B4332] text-xl mt-0.5">Welcome back, {currentUser.name}</h2>
+            <span className="text-[10px] font-mono font-bold text-[#2D6A4F]/60 dark:text-[#52B788]/60 uppercase tracking-widest">Active Secure Session</span>
+            <h2 className="font-serif font-extrabold text-[#1B4332] dark:text-[#52B788] text-xl mt-0.5 animate-fade-in">Welcome back, {currentUser.name}</h2>
           </div>
           <div className="flex items-center gap-5">
             <div className="text-right">
-              <p className="text-xs font-extrabold text-gray-700">{currentUser.email}</p>
+              <p className="text-xs font-extrabold text-gray-700 dark:text-stone-300">{currentUser.email}</p>
               <div className="flex items-center justify-end gap-1.5 mt-0.5">
                 <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <p className="text-[9.5px] font-mono text-[#2D6A4F] uppercase font-bold tracking-wider">{currentUser.role.split('_').join(' ')} Profile</p>
+                <p className="text-[9.5px] font-mono text-[#2D6A4F] dark:text-[#52B788]/85 uppercase font-bold tracking-wider">{currentUser.role.split('_').join(' ')} Profile</p>
               </div>
             </div>
-            <div className="h-8 w-px bg-gray-150" />
+            <div className="h-8 w-px bg-gray-150 dark:bg-stone-800" />
+            
+            {/* Desktop Theme Toggle Button */}
+            <button
+              id="desktop-theme-toggle"
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-1.5 bg-stone-50 dark:bg-stone-800/40 hover:bg-[#1B4332]/10 dark:hover:bg-stone-800 rounded-xl text-gray-400 dark:text-stone-300 hover:text-[#1B4332] dark:hover:text-[#52B788] transition cursor-pointer min-w-[40px] min-h-[40px] flex items-center justify-center border border-gray-150 dark:border-stone-800"
+              title="Toggle Light/Dark Theme"
+            >
+              {isDarkMode ? <Sun className="h-5 w-5 text-[#52B788]" /> : <Moon className="h-5 w-5" />}
+            </button>
+
             <NotificationBell user={currentUser} token={authToken} refreshSignal={refreshSignal} />
           </div>
         </div>
