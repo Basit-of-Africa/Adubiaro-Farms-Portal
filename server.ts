@@ -14,7 +14,8 @@ import pg from 'pg';
 import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
-import { Firestore } from '@google-cloud/firestore';
+import { initializeApp as initializeFirebaseApp } from 'firebase/app';
+import { initializeFirestore, doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore';
 import {
   User,
   UserRole,
@@ -424,12 +425,12 @@ try {
   }
 
   if (firebaseConfig) {
+    const fApp = initializeFirebaseApp(firebaseConfig);
     const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID || '(default)';
-    firestoreDb = new Firestore({
-      projectId: firebaseConfig.projectId,
-      databaseId: dbId,
-    });
-    console.log(`✅ Firebase Firestore server SDK client successfully initialized on database: "${dbId}".`);
+    firestoreDb = initializeFirestore(fApp, {
+      experimentalForceLongPolling: true
+    }, dbId);
+    console.log(`✅ Firebase Firestore client successfully initialized on database: "${dbId}" with long-polling force enablement.`);
   } else {
     console.warn('⚠️ No Firebase configuration found (neither env vars nor JSON config). Firestore cloud backing disabled.');
   }
@@ -456,9 +457,9 @@ async function loadDbFromFirestore() {
 
     let loadedSomething = false;
     for (const col of collectionsToLoad) {
-      const querySnapshot = await firestoreDb.collection(col.name).get();
+      const querySnapshot = await getDocs(collection(firestoreDb, col.name));
       const items: any[] = [];
-      querySnapshot.forEach((docSnapshot: any) => {
+      querySnapshot.forEach((docSnapshot) => {
         items.push({ id: docSnapshot.id, ...docSnapshot.data() });
       });
       if (items.length > 0) {
@@ -470,8 +471,8 @@ async function loadDbFromFirestore() {
     }
 
     // Load settings
-    const settingsDoc = await firestoreDb.collection('settings').doc('standalone').get();
-    if (settingsDoc && settingsDoc.exists) {
+    const settingsDoc = await getDoc(doc(firestoreDb, 'settings', 'standalone'));
+    if (settingsDoc.exists()) {
       db.settings = settingsDoc.data() as SystemSettings;
       loadedSomething = true;
     }
@@ -508,14 +509,14 @@ async function saveDbToFirestore() {
           const { id, ...data } = item;
           // Prevent setting undefined values in Firestore
           const cleanData = JSON.parse(JSON.stringify(data));
-          await firestoreDb.collection(col.name).doc(item.id).set(cleanData);
+          await setDoc(doc(firestoreDb, col.name, item.id), cleanData);
         }
       }
     }
 
     if (db.settings) {
       const cleanSettings = JSON.parse(JSON.stringify(db.settings));
-      await firestoreDb.collection('settings').doc('standalone').set(cleanSettings);
+      await setDoc(doc(firestoreDb, 'settings', 'standalone'), cleanSettings);
     }
     console.log('✅ Synchronized memory DB state to Firestore successfully.');
   } catch (err) {
