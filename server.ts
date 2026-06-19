@@ -797,17 +797,41 @@ async function initPostgres() {
 
   try {
     console.log('🔌 Connecting to PostgreSQL database...');
-    pgPool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: {
-        rejectUnauthorized: false
+    let hasConnected = false;
+    
+    try {
+      pgPool = new pg.Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+          rejectUnauthorized: false
+        }
+      });
+      // Verify connections
+      const client = await pgPool.connect();
+      console.log('🚀 Connected to PostgreSQL successfully (SSL mode enabled)!');
+      client.release();
+      hasConnected = true;
+    } catch (sslErr: any) {
+      console.log(`⚠️ PostgreSQL SSL connection failed: ${sslErr.message}. Retrying without forced SSL...`);
+      // Clean up the SSL-configured pool
+      if (pgPool) {
+        await pgPool.end().catch(() => {});
       }
-    });
+      
+      pgPool = new pg.Pool({
+        connectionString: process.env.DATABASE_URL
+      });
+      // Verify connection in non-SSL mode
+      const client = await pgPool.connect();
+      console.log('🚀 Connected to PostgreSQL successfully (SSL mode disabled/automatic)!');
+      client.release();
+      hasConnected = true;
+    }
 
-    // Verify connections
-    const client = await pgPool.connect();
-    console.log('🚀 Connected to PostgreSQL successfully!');
-    client.release();
+    if (!hasConnected) {
+      throw new Error('All database connection strategies exhausted.');
+    }
+
     usePostgres = true;
 
     // Build the schema if not existing
