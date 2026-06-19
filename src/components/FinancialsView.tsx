@@ -12,7 +12,8 @@ import {
   HelpCircle, 
   Calendar,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Download
 } from 'lucide-react';
 import { User, FinancialStatus } from '../types';
 
@@ -94,6 +95,55 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
   const totalRoiCombined = financials.reduce((sum, f) => sum + (f.roiPercentage || 0), 0);
   const avgRoi = financials.length > 0 ? (totalRoiCombined / financials.length) : 0;
 
+  const handleExportToCSV = () => {
+    if (financials.length === 0) return;
+
+    // Helper to escape values for CSV formulation
+    const escapeCSV = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val).replace(/"/g, '""');
+      return str.includes(',') || str.includes('\n') || str.includes('"') ? `"${str}"` : str;
+    };
+
+    const headers = [
+      'Billing Cycle',
+      ...(user.role === 'admin' ? ['Investor Client'] : []),
+      'Plot ID',
+      'Crop Cultivar',
+      'Net Payout (₦)',
+      'Yield ROI (%)',
+      'Ledger Date',
+      'Status',
+      'Auditor Remarks'
+    ];
+
+    const rows = financials.map(fin => [
+      `${fin.period} ${fin.year}`,
+      ...(user.role === 'admin' ? [fin.investorName || ''] : []),
+      fin.plotNumber || '',
+      fin.cropType || '',
+      fin.payoutAmount || 0,
+      fin.roiPercentage || 0,
+      fin.payoutDate || '',
+      fin.status || '',
+      fin.notes || ''
+    ]);
+
+    const csvContent = [
+      headers.map(escapeCSV).join(','),
+      ...rows.map(row => row.map(escapeCSV).join(','))
+    ].join('\n');
+
+    const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `adubiaro_investment_payouts_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div id="financials-stage" className="space-y-8 animate-fade-in">
       
@@ -103,6 +153,15 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
           <h1 className="font-serif font-extrabold text-2xl text-[#1B4332] tracking-wide">Investment Ledger Statements</h1>
           <p className="text-xs text-[#2c3e35]/60 font-mono mt-1">Notarized statements, audits & historical ROI payout records</p>
         </div>
+        {financials.length > 0 && (
+          <button
+            onClick={handleExportToCSV}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#1B4332] hover:bg-[#2D6A4F] text-[#52B788] hover:text-white rounded-xl text-xs font-bold transition duration-300 shadow-sm border border-[#52B788]/20 cursor-pointer animate-fade-in"
+          >
+            <Download className="h-4 w-4 animate-bounce" />
+            <span>Export to CSV</span>
+          </button>
+        )}
       </div>
 
       {/* Stats row */}
