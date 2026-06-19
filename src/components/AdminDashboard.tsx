@@ -28,6 +28,7 @@ import {
   HardDrive
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
+import DashboardStats from './DashboardStats';
 
 interface AdminDashboardProps {
   user: User;
@@ -670,6 +671,14 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
             <span>Go Live — Wipe Demo Data</span>
           </button>
         </div>
+      </div>
+
+      {/* New 'Dashboard Stats' Key Performance Indicators Grid */}
+      <div id="admin-dashboard-stats-section" className="space-y-4">
+        <h2 className="font-sans font-extrabold text-xs text-[#2c3e35]/70 uppercase tracking-wider font-mono">
+          System Performance Analytics
+        </h2>
+        <DashboardStats stats={stats} loading={loading} />
       </div>
 
       {/* Stats KPI Grid */}

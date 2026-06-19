@@ -1152,10 +1152,13 @@ app.get('/api/admin/system-stats', requireAuth, (req, res) => {
   const totalInvestors = db.users.filter(u => u.role === UserRole.INVESTOR).length;
   const totalManagers = db.users.filter(u => u.role === UserRole.FARM_MANAGER).length;
   const totalFarms = db.farms.length;
+  const totalActiveFarms = db.farms.filter(f => f.isActive).length;
   const totalPlotsCount = db.plots.length;
   
   // Calculate total investments
   const totalInvestment = db.investorPlots.reduce((sum, p) => sum + p.investmentAmount, 0);
+  const totalActiveInvestmentCount = db.investorPlots.filter(ip => ip.isActive).length;
+  const totalActiveInvestmentAmount = db.investorPlots.filter(ip => ip.isActive).reduce((sum, p) => sum + p.investmentAmount, 0);
   
   // Calculate total paid and pending payouts
   let totalPaidPayouts = 0;
@@ -1168,14 +1171,32 @@ app.get('/api/admin/system-stats', requireAuth, (req, res) => {
     }
   });
 
+  // Calculate payouts this month
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+  let totalPayoutsThisMonth = 0;
+  db.financials.forEach(fin => {
+    if (fin.payoutDate) {
+      const pDate = new Date(fin.payoutDate);
+      if (!isNaN(pDate.getTime()) && pDate.getFullYear() === curYear && pDate.getMonth() === curMonth) {
+        totalPayoutsThisMonth += fin.payoutAmount;
+      }
+    }
+  });
+
   res.json({
     totalInvestors,
     totalManagers,
     totalFarms,
+    totalActiveFarms,
     totalPlotsCount,
     totalInvestment,
+    totalActiveInvestmentCount,
+    totalActiveInvestmentAmount,
     totalPaidPayouts,
-    totalPendingPayouts
+    totalPendingPayouts,
+    totalPayoutsThisMonth
   });
 });
 
