@@ -179,7 +179,8 @@ export default function App() {
       )}
 
       {/* Main Container workspace */}
-      <main className="flex-1 lg:pl-[280px] p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full min-h-screen">
+      <div className="flex-1 lg:pl-[280px] w-full min-h-screen">
+        <main id="main-content" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full">
         
         {/* Desktop Top Header Bar with Live Alerts */}
         <div className="hidden lg:flex justify-between items-center bg-white border border-[#2D6A4F]/10 px-6 py-4.5 rounded-3xl shadow-premium">
@@ -295,7 +296,8 @@ export default function App() {
 
 
 
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
