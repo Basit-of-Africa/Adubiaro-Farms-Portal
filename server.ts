@@ -790,8 +790,10 @@ async function initPostgres() {
     return;
   }
 
-  if (!process.env.DATABASE_URL) {
-    console.log('⚠️ DATABASE_URL not set. Running in local JSON file mode.');
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || dbUrl === 'undefined' || dbUrl === 'null' || !dbUrl.trim() || dbUrl === 'YOUR_DATABASE_URL') {
+    console.log('⚠️ DATABASE_URL not set or set to dummy value. Running in local JSON file mode.');
+    usePostgres = false;
     return;
   }
 
@@ -812,18 +814,35 @@ async function initPostgres() {
       client.release();
       hasConnected = true;
     } catch (sslErr: any) {
-      console.log(`⚠️ PostgreSQL SSL connection failed: ${sslErr.message}. Retrying without forced SSL...`);
+      console.log(`⚠️ PostgreSQL SSL connection failed: ${sslErr.message}. Retrying with completely disabled SSL...`);
       // Clean up the SSL-configured pool
       if (pgPool) {
         await pgPool.end().catch(() => {});
       }
       
+      // Remove any SSL-related query options from connectionString to prevent drivers from forcing SSL
+      let cleanDbUrl = process.env.DATABASE_URL || '';
+      try {
+        const parsedUrl = new URL(cleanDbUrl);
+        parsedUrl.searchParams.delete('sslmode');
+        parsedUrl.searchParams.delete('ssl');
+        parsedUrl.searchParams.delete('sslfactory');
+        cleanDbUrl = parsedUrl.toString();
+      } catch (urlErr) {
+        // Simple regex fallback if connection URL isn't standard/parseable by new URL()
+        cleanDbUrl = cleanDbUrl
+          .replace(/[?&]sslmode=[^&]+/g, '')
+          .replace(/[?&]ssl=[^&]+/g, '')
+          .replace(/[?&]sslfactory=[^&]+/g, '');
+      }
+
       pgPool = new pg.Pool({
-        connectionString: process.env.DATABASE_URL
+        connectionString: cleanDbUrl,
+        ssl: false
       });
       // Verify connection in non-SSL mode
       const client = await pgPool.connect();
-      console.log('🚀 Connected to PostgreSQL successfully (SSL mode disabled/automatic)!');
+      console.log('🚀 Connected to PostgreSQL successfully (SSL mode completely disabled)!');
       client.release();
       hasConnected = true;
     }
