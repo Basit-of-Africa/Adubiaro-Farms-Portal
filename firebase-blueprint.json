@@ -162,7 +162,17 @@
         "logoText": { "type": "string" },
         "accentColor": { "type": "string" },
         "announcementBanner": { "type": "string" },
-        "bannerType": { "type": "string" }
+        "bannerType": { "type": "string" },
+        "emailServiceType": { "type": "string" },
+        "smtpHost": { "type": "string" },
+        "smtpPort": { "type": "integer" },
+        "smtpSecure": { "type": "boolean" },
+        "smtpUser": { "type": "string" },
+        "smtpPass": { "type": "string" },
+        "smtpFrom": { "type": "string" },
+        "brevoApiKey": { "type": "string" },
+        "brevoSenderEmail": { "type": "string" },
+        "brevoSenderName": { "type": "string" }
       }
     }
   },

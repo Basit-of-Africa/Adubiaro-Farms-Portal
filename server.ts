@@ -2259,6 +2259,10 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Test recipient email is required.' });
   }
 
+  const storedSettings = getSettings();
+  const actualSmtpPass = smtpPass === '__SECURE_PLACEHOLDER__' ? (storedSettings.smtpPass || '') : (smtpPass || '');
+  const actualBrevoApiKey = brevoApiKey === '__SECURE_PLACEHOLDER__' ? (storedSettings.brevoApiKey || '') : (brevoApiKey || '');
+
   const subject = 'Adubiaro Farm Portal — Email Integration Test Successful!';
   const textBody = 'Hello! This is a test email from your Adubiaro Farm Portal admin dashboard to verify that your email integration settings are configured correctly. If you received this, everything is working perfectly!';
   const htmlBody = `
@@ -2287,7 +2291,7 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
         port: parseInt(smtpPort || '587'),
         secure: smtpSecure !== false,
         user: smtpUser || '',
-        pass: smtpPass || '',
+        pass: actualSmtpPass,
         from: smtpFrom || 'Adubiaro Farms <noreply@adubiaro.com>',
         to: testRecipient,
         subject,
@@ -2295,9 +2299,9 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
         html: htmlBody
       });
     } else if (emailServiceType === 'brevo') {
-      if (!brevoApiKey) throw new Error('Brevo API Key is required');
+      if (!actualBrevoApiKey) throw new Error('Brevo API Key is required');
       await sendBrevoEmail({
-        apiKey: brevoApiKey,
+        apiKey: actualBrevoApiKey,
         senderName: brevoSenderName || 'Adubiaro Farms',
         senderEmail: brevoSenderEmail || 'noreply@adubiaro.com',
         to: testRecipient,
@@ -2698,7 +2702,13 @@ app.get('/api/admin/settings', requireAuth, (req, res) => {
   if (user.role !== UserRole.ADMIN) {
     return res.status(403).json({ error: 'Admin access required.' });
   }
-  res.json(getSettings());
+  const settings = getSettings();
+  const maskedSettings = {
+    ...settings,
+    smtpPass: settings.smtpPass ? '__SECURE_PLACEHOLDER__' : '',
+    brevoApiKey: settings.brevoApiKey ? '__SECURE_PLACEHOLDER__' : ''
+  };
+  res.json(maskedSettings);
 });
 
 app.put('/api/admin/settings', requireAuth, (req, res) => {
@@ -2726,9 +2736,21 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
   if (newSettings.smtpPort !== undefined) currentSettings.smtpPort = parseInt(newSettings.smtpPort !== null ? newSettings.smtpPort : '587');
   if (newSettings.smtpSecure !== undefined) currentSettings.smtpSecure = Boolean(newSettings.smtpSecure);
   if (newSettings.smtpUser !== undefined) currentSettings.smtpUser = newSettings.smtpUser;
-  if (newSettings.smtpPass !== undefined) currentSettings.smtpPass = newSettings.smtpPass;
+  if (newSettings.smtpPass !== undefined) {
+    if (newSettings.smtpPass !== '__SECURE_PLACEHOLDER__' && newSettings.smtpPass !== '') {
+      currentSettings.smtpPass = newSettings.smtpPass;
+    } else if (newSettings.smtpPass === '') {
+      currentSettings.smtpPass = '';
+    }
+  }
   if (newSettings.smtpFrom !== undefined) currentSettings.smtpFrom = newSettings.smtpFrom;
-  if (newSettings.brevoApiKey !== undefined) currentSettings.brevoApiKey = newSettings.brevoApiKey;
+  if (newSettings.brevoApiKey !== undefined) {
+    if (newSettings.brevoApiKey !== '__SECURE_PLACEHOLDER__' && newSettings.brevoApiKey !== '') {
+      currentSettings.brevoApiKey = newSettings.brevoApiKey;
+    } else if (newSettings.brevoApiKey === '') {
+      currentSettings.brevoApiKey = '';
+    }
+  }
   if (newSettings.brevoSenderEmail !== undefined) currentSettings.brevoSenderEmail = newSettings.brevoSenderEmail;
   if (newSettings.brevoSenderName !== undefined) currentSettings.brevoSenderName = newSettings.brevoSenderName;
 
@@ -2742,7 +2764,12 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
   }
 
   saveDb();
-  res.json(currentSettings);
+  const responseSettings = {
+    ...currentSettings,
+    smtpPass: currentSettings.smtpPass ? '__SECURE_PLACEHOLDER__' : '',
+    brevoApiKey: currentSettings.brevoApiKey ? '__SECURE_PLACEHOLDER__' : ''
+  };
+  res.json(responseSettings);
 });
 
 app.get('/api/portal/settings', (req, res) => {
