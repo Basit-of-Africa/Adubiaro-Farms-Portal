@@ -2844,6 +2844,91 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
   res.json(responseSettings);
 });
 
+app.get('/api/admin/database/export', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+
+  // Create export payload
+  const payload = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    db: db
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename=adubiaro-db-export-${Date.now()}.json`);
+  res.send(JSON.stringify(payload, null, 2));
+});
+
+app.post('/api/admin/database/import', requireAuth, async (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+
+  try {
+    const { db: importedDb } = req.body;
+
+    if (!importedDb) {
+      return res.status(400).json({ error: 'Invalid payload structure: missing "db" block.' });
+    }
+
+    // Basic structure validation to prevent corrupted uploads
+    const requiredKeys = ['users', 'settings', 'farms', 'plots', 'investors', 'payouts', 'alerts', 'financials'];
+    const missingKeys = requiredKeys.filter(key => !importedDb[key] || (!Array.isArray(importedDb[key]) && key !== 'settings'));
+    
+    if (missingKeys.length > 0) {
+      return res.status(400).json({ error: `Import failed: database validation failed. Missing keys: ${missingKeys.join(', ')}` });
+    }
+
+    // Replace in-memory database
+    db = importedDb;
+
+    // Persist immediately across active channels
+    saveDb();
+
+    // Log the import backup event
+    const logs = loadBackupLogs();
+    const timestamp = new Date().toISOString();
+    const id = `bk-import-${Date.now()}`;
+    const fileName = `db-import-restore-${Date.now()}.json`;
+    const filePath = path.join(BACKUPS_DIR, fileName);
+
+    // Save as local backup log copy
+    try {
+      if (!fs.existsSync(BACKUPS_DIR)) {
+        fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+      }
+      fs.writeFileSync(filePath, JSON.stringify(db, null, 2));
+    } catch (e) {
+      console.error('Failed to write copy of imported database:', e);
+    }
+
+    const newLog: BackupLog = {
+      id,
+      timestamp,
+      backupType: 'manual',
+      fileName,
+      fileSize: (JSON.stringify(db).length / 1024).toFixed(2) + ' KB',
+      status: 'success'
+    };
+
+    logs.unshift(newLog);
+    saveBackupLogs(logs);
+
+    res.json({
+      success: true,
+      message: 'System database state fully restored and synchronized successfully!',
+      timestamp
+    });
+  } catch (err: any) {
+    console.error('❌ Database state import error:', err);
+    res.status(500).json({ error: `Failed to restore database state: ${err.message || 'Unknown error'}` });
+  }
+});
+
 app.get('/api/portal/settings', (req, res) => {
   const settings = getSettings();
   res.json({

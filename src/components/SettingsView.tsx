@@ -29,7 +29,9 @@ import {
   Briefcase,
   Eye,
   EyeOff,
-  Mail
+  Mail,
+  Download,
+  Upload
 } from 'lucide-react';
 import { User, UserRole, SystemSettings } from '../types';
 
@@ -58,6 +60,8 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
   const [backupsError, setBackupsError] = useState<string | null>(null);
   const [backupsSuccessMessage, setBackupsSuccessMessage] = useState<string | null>(null);
   const [triggeringBackup, setTriggeringBackup] = useState<boolean>(false);
+  const [exportingDb, setExportingDb] = useState<boolean>(false);
+  const [importingDb, setImportingDb] = useState<boolean>(false);
   const [dbStatus, setDbStatus] = useState<any>(null);
   const [loadingDbStatus, setLoadingDbStatus] = useState<boolean>(false);
 
@@ -310,6 +314,113 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
       setBackupsError(err.message || 'Error executing DB snapshot compilation.');
     } finally {
       setTriggeringBackup(false);
+    }
+  };
+
+  // Export Complete Database (.json)
+  const handleExportDatabase = async () => {
+    if (exportingDb) return;
+    try {
+      setExportingDb(true);
+      setBackupsError(null);
+      setBackupsSuccessMessage(null);
+      
+      const res = await fetch('/api/admin/database/export', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!res.ok) throw new Error('Database export failed on server');
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `adubiaro-system-backup-${new Date().toISOString().split('T')[0]}-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      setBackupsSuccessMessage('System database structure and real user data exported successfully as a JSON file download.');
+    } catch (err: any) {
+      setBackupsError(err.message || 'Error occurred while exporting database.');
+    } finally {
+      setExportingDb(false);
+    }
+  };
+
+  // Restore / Import Database (.json)
+  const handleImportDatabase = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (importingDb) return;
+    
+    const inputElement = e.target;
+    
+    if (!window.confirm('WARNING: Restoring/Importing a database will completely overwrite all existing records (farms, users, settings, financial logs, payout history, alerts, and outbox logs). This action is IRREVERSIBLE. Are you sure you want to proceed?')) {
+      inputElement.value = '';
+      return;
+    }
+    
+    try {
+      setImportingDb(true);
+      setBackupsError(null);
+      setBackupsSuccessMessage(null);
+      
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const parsed = JSON.parse(event.target?.result as string);
+          
+          const res = await fetch('/api/admin/database/import', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ db: parsed.db || parsed })
+          });
+          
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Database restoration endpoint failed');
+          }
+          
+          setBackupsSuccessMessage(data.message || 'System database fully restored and synchronized successfully!');
+          
+          if (triggerRefreshSignal) {
+            triggerRefreshSignal();
+          }
+          
+          fetchDbStatus();
+          
+          const logsRes = await fetch('/api/admin/backups', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (logsRes.ok) {
+            const logsData = await logsRes.json();
+            setBackups(logsData);
+          }
+        } catch (innerErr: any) {
+          setBackupsError(`Failed to parse or upload file: ${innerErr.message}`);
+        } finally {
+          setImportingDb(false);
+          inputElement.value = '';
+        }
+      };
+      
+      reader.onerror = () => {
+        setBackupsError('Error reading backup file.');
+        setImportingDb(false);
+        inputElement.value = '';
+      };
+      
+      reader.readAsText(file);
+    } catch (err: any) {
+      setBackupsError(err.message || 'Error occurred during database import.');
+      setImportingDb(false);
+      inputElement.value = '';
     }
   };
 
@@ -816,6 +927,79 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                 </div>
               </div>
 
+            </div>
+
+            {/* Deploy & Migration Persistence Tools Card */}
+            <div className="bg-[#143427]/5 border border-[#2D6A4F]/20 p-6 rounded-3xl space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#1B4332] rounded-xl text-white">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-sm font-extrabold text-[#1B4332] font-sans">Deploy & Migration Persistence Manager</h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Safely backup or restore your entire system configuration, user profiles, financial metrics, and operational audits. Use this to easily migrate state across active server deployments!</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div className="bg-white border border-gray-150 p-4.5 rounded-2xl flex flex-col justify-between space-y-3 shadow-sm text-left">
+                  <div>
+                    <h5 className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                      <Download className="h-4 w-4 text-[#1B4332]" />
+                      Export Comprehensive Database
+                    </h5>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-normal">
+                      Instantly package your complete live database state (including farms, investors, users, and financials) into a secure, portable JSON backup file. Keep this download safe before pushing new deployments.
+                    </p>
+                  </div>
+                  <button
+                    id="btn-export-db-file"
+                    onClick={handleExportDatabase}
+                    disabled={exportingDb}
+                    className="w-full bg-[#1B4332] hover:bg-[#2D6A4F] disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {exportingDb ? (
+                      <RefreshCw className="animate-spin h-3.5 w-3.5" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                    <span>Download Portability Snapshot</span>
+                  </button>
+                </div>
+
+                <div className="bg-white border border-gray-150 p-4.5 rounded-2xl flex flex-col justify-between space-y-3 shadow-sm text-left">
+                  <div>
+                    <h5 className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                      <Upload className="h-4 w-4 text-amber-600" />
+                      Restore / Import Database File
+                    </h5>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-normal">
+                      Overwrites the active environment database with a previously exported snapshot. Restored records will be automatically written to Firestore or Local Storage memory.
+                    </p>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="db-file-upload-input"
+                      accept=".json"
+                      onChange={handleImportDatabase}
+                      disabled={importingDb}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="db-file-upload-input"
+                      className={`w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 text-center select-none ${importingDb ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      {importingDb ? (
+                        <RefreshCw className="animate-spin h-3.5 w-3.5" />
+                      ) : (
+                        <Upload className="h-3.5 w-3.5" />
+                      )}
+                      <span>Upload Portability Snapshot</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Backups Logs Table */}
