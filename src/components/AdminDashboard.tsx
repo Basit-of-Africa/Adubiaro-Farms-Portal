@@ -913,7 +913,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Financial year</label>
                     <input

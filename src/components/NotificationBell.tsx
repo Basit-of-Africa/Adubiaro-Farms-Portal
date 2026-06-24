@@ -169,7 +169,7 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
       {isOpen && (
         <div 
           id="notifications-dropdown"
-          className="absolute right-0 mt-3.5 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden origin-top-right animate-fadeIn"
+          className="absolute right-0 mt-3.5 w-[calc(100vw-32px)] max-w-sm sm:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden origin-top-right animate-fadeIn"
         >
           {/* Header */}
           <div className="p-4 border-b border-gray-50 bg-[#143427] text-white flex items-center justify-between">
@@ -288,7 +288,7 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
               </div>
 
               {/* Grid Metadata details based on type */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 
                 {selectedAlert.meta?.farmName && (
                   <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100/50">

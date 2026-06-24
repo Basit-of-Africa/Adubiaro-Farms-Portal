@@ -387,7 +387,7 @@ export default function QuickActions({ user, token, onTabChange, onRefresh }: Qu
               initial={{ opacity: 0, y: 15, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 15, scale: 0.9 }}
-              className="absolute bottom-16 right-0 w-72 bg-white rounded-3xl border border-[#2D6A4F]/10 shadow-premium overflow-hidden p-3 space-y-1 mb-2"
+              className="absolute bottom-16 right-0 w-[calc(100vw-3rem)] max-w-[288px] bg-white rounded-3xl border border-[#2D6A4F]/10 shadow-premium overflow-hidden p-3 space-y-1 mb-2"
             >
               <div className="px-3 py-2 border-b border-gray-50 flex items-center justify-between">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-gray-400 font-bold">Quick Actions</span>

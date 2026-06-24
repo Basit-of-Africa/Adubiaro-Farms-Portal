@@ -1020,8 +1020,10 @@ function isPostgresConfigured(): boolean {
 
 // Main integration initialization for PostgreSQL
 async function initPostgres() {
-  // Load local database config first to determine settings-based overrides
-  loadLocalJsonDb();
+  // Load local database config first only if we haven't already successfully loaded from Firestore
+  if (db.users.length === 0) {
+    loadLocalJsonDb();
+  }
 
   const settings = getSettings();
   if (settings.databaseMode === 'local_json') {

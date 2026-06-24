@@ -155,7 +155,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 <Sparkles className="h-3.5 w-3.5 text-[#D4A017]" />
                 <h3 className="text-[10px] font-mono font-bold uppercase text-gray-400 tracking-widest text-center">Interactive Role Switcher</h3>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   id="btn-demo-admin"
                   type="button"
