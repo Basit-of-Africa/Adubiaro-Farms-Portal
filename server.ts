@@ -513,9 +513,30 @@ try {
   console.error('❌ Failed to initialize Firebase Firestore:', e);
 }
 
+// Helper for retrying Firestore operations with exponential backoff
+async function retryWithBackoff<T>(fn: () => Promise<T>, retries = 5, delay = 1000): Promise<T> {
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      attempt++;
+      if (attempt > retries) {
+        throw error;
+      }
+      const waitTime = delay * Math.pow(2, attempt - 1);
+      console.warn(`⚠️ Firestore operation failed (attempt ${attempt}/${retries}). Retrying in ${waitTime}ms... Error: ${error.message || error}`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+  }
+  throw new Error('Unreachable in retryWithBackoff');
+}
+
 // Helper to load complete memory db state from Firestore collections
 async function loadDbFromFirestore() {
-  if (!firestoreDb) return;
+  if (!firestoreDb) {
+    throw new Error('Firestore is not configured.');
+  }
   console.log('🔄 Loading persisted state from Firebase Firestore...');
   try {
     const collectionsToLoad = [
@@ -532,7 +553,7 @@ async function loadDbFromFirestore() {
 
     let loadedSomething = false;
     for (const col of collectionsToLoad) {
-      const querySnapshot = await getDocs(collection(firestoreDb, col.name));
+      const querySnapshot = await retryWithBackoff(() => getDocs(collection(firestoreDb, col.name)), 4, 1000);
       const items: any[] = [];
       querySnapshot.forEach((docSnapshot) => {
         items.push({ id: docSnapshot.id, ...docSnapshot.data() });
@@ -546,7 +567,7 @@ async function loadDbFromFirestore() {
     }
 
     // Load settings
-    const settingsDoc = await getDoc(doc(firestoreDb, 'settings', 'standalone'));
+    const settingsDoc = await retryWithBackoff(() => getDoc(doc(firestoreDb, 'settings', 'standalone')), 4, 1000);
     if (settingsDoc.exists()) {
       db.settings = settingsDoc.data() as SystemSettings;
       loadedSomething = true;
@@ -554,11 +575,14 @@ async function loadDbFromFirestore() {
 
     if (loadedSomething) {
       console.log('✅ Loaded data successfully from Firestore!');
+      return true;
     } else {
       console.log('ℹ️ Firestore database is empty.');
+      return false;
     }
   } catch (err) {
     console.error('❌ Error reading from Firestore:', err);
+    throw err; // propagate so initialization logic knows connection failed
   }
 }
 
@@ -584,30 +608,63 @@ async function saveDbToFirestore() {
           const { id, ...data } = item;
           // Prevent setting undefined values in Firestore
           const cleanData = JSON.parse(JSON.stringify(data));
-          await setDoc(doc(firestoreDb, col.name, item.id), cleanData);
+          await retryWithBackoff(() => setDoc(doc(firestoreDb, col.name, item.id), cleanData), 3, 1000);
         }
       }
     }
 
     if (db.settings) {
       const cleanSettings = JSON.parse(JSON.stringify(db.settings));
-      await setDoc(doc(firestoreDb, 'settings', 'standalone'), cleanSettings);
+      await retryWithBackoff(() => setDoc(doc(firestoreDb, 'settings', 'standalone'), cleanSettings), 3, 1000);
     }
     console.log('✅ Synchronized memory DB state to Firestore successfully.');
   } catch (err) {
     console.error('❌ Error synchronizing memory DB to Firestore:', err);
+    throw err;
   }
 }
 
 async function initFirestore() {
-  if (!firestoreDb) return;
+  if (!firestoreDb) {
+    console.warn('⚠️ No Firestore client available. Falling back to Local Storage (local db.json).');
+    loadLocalJsonDb();
+    return;
+  }
+
+  // Check if explicitly configured for offline/local JSON mode in local settings file
+  let isExplicitlyOffline = false;
   try {
-    await loadDbFromFirestore();
+    if (fs.existsSync(DB_FILE)) {
+      const localDb = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      if (localDb && localDb.settings && localDb.settings.databaseMode === 'local_json') {
+        isExplicitlyOffline = true;
+        console.log('🔌 Database mode is explicitly set to Local JSON (Offline mode). Bypassing Firestore/cloud initialization.');
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not check local settings file for databaseMode:', e);
+  }
+
+  if (isExplicitlyOffline) {
+    loadLocalJsonDb();
+    return;
+  }
+
+  // Attempt to connect and fetch data from Firestore with read/write retry logic
+  console.log('🛡️ Attempting to connect to Firestore database with retry logic...');
+  try {
+    const isSuccess = await loadDbFromFirestore();
     
-    // Check if both the settings doc doesn't exist and users are empty
-    // This allows users to completely clear their users list without triggering a re-seed on restart.
-    const settingsDocExists = await getDoc(doc(firestoreDb, 'settings', 'standalone')).then(d => d.exists()).catch(() => false);
+    // Check if the settings doc exists in Firestore to see if we should seed
+    let settingsDocExists = false;
+    try {
+      const settingsDoc = await retryWithBackoff(() => getDoc(doc(firestoreDb, 'settings', 'standalone')), 4, 1000);
+      settingsDocExists = settingsDoc.exists();
+    } catch (err) {
+      console.error('❌ Could not verify settings doc in Firestore:', err);
+    }
     
+    // Seed Firestore only if it is completely empty
     if (!settingsDocExists && db.users.length === 0) {
       console.log('🌱 Firestore is empty. Initializing and seeding Firestore database...');
       db = getInitialDb();
@@ -616,8 +673,10 @@ async function initFirestore() {
     } else {
       console.log('ℹ️ Firestore already initialized / seeded. Skipping seeding step.');
     }
-  } catch (err) {
-    console.error('❌ Failed to initialize/sync Firestore database:', err);
+  } catch (err: any) {
+    console.error('❌ CRITICAL: Failed to establish a reliable connection to Firestore on startup:', err);
+    console.warn('⚠️ Falling back to Local Storage (local db.json) to preserve app availability, but warning user.');
+    loadLocalJsonDb();
   }
 }
 
