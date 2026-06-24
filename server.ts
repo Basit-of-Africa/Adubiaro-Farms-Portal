@@ -120,11 +120,14 @@ async function sendSmtpEmail({
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: secure !== false,
+    secure: port === 465 ? true : secure,
     auth: {
       user,
       pass
-    }
+    },
+    connectionTimeout: 8000,  // Fail-fast connection timeout
+    greetingTimeout: 8000,    // Fail-fast greeting timeout
+    socketTimeout: 12000      // Fail-fast socket inactivity timeout
   });
 
   await transporter.sendMail({
@@ -2329,7 +2332,15 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
     res.json({ success: true, message: `Test email successfully routed and sent to ${testRecipient}!` });
   } catch (err: any) {
     console.error('❌ Test email send error:', err);
-    res.status(500).json({ error: err.message || 'Unknown error occurred during test send.' });
+    let errorMsg = err.message || 'Unknown error occurred during test send.';
+    if (
+      err.code === 'ETIMEDOUT' ||
+      errorMsg.toLowerCase().includes('timeout') ||
+      errorMsg.toLowerCase().includes('connect')
+    ) {
+      errorMsg = `SMTP Connection Timeout/Failed: "${errorMsg}". Note: Cloud containers (e.g. Cloud Run) block standard outbound SMTP ports (25, 465, 587) by default to prevent spam. We highly recommend switching your 'Integration Channel Method' to 'Brevo SMTP Third-Party API' which communicates securely over standard HTTPS (port 443) and is fully supported in this cloud sandbox environment!`;
+    }
+    res.status(500).json({ error: errorMsg });
   }
 });
 
