@@ -56,6 +56,7 @@ export interface User {
   profilePhoto?: string;
   email: string;
   name: string;
+  password?: string;
 }
 
 export interface Farm {
@@ -170,4 +171,14 @@ export interface SystemSettings {
   accentColor: string;
   announcementBanner: string;
   bannerType: 'info' | 'warning' | 'success' | 'none';
+  emailServiceType?: 'simulation' | 'smtp' | 'brevo';
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  brevoApiKey?: string;
+  brevoSenderEmail?: string;
+  brevoSenderName?: string;
 }

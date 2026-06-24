@@ -25,7 +25,9 @@ import {
   Settings,
   Database,
   Clock,
-  HardDrive
+  HardDrive,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
 import DashboardStats from './DashboardStats';
@@ -86,6 +88,8 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newRole, setNewRole] = useState('investor');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [userSuccessMessage, setUserSuccessMessage] = useState<string | null>(null);
 
   // 2. Allocate Plot
@@ -332,17 +336,19 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
           name: newName,
           email: newEmail,
           phone: newPhone,
-          role: newRole
+          role: newRole,
+          password: newPassword
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'User setup error');
 
-      setUserSuccessMessage(`Investor account ${data.name} provisioned successfully! Signals triggered a welcome notification.`);
+      setUserSuccessMessage(`Account for ${data.name} (${data.role.toUpperCase()}) provisioned successfully! Signals triggered a welcome notification.`);
       setNewUsername('');
       setNewName('');
       setNewEmail('');
       setNewPhone('');
+      setNewPassword('');
       triggerRefreshSignal();
     } catch (err: any) {
       alert(err.message);
@@ -803,12 +809,12 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
               onClick={() => setActiveFormTab('user')}
               className={`px-4 py-3.5 text-[11px] font-mono font-bold uppercase tracking-wider border-b-2 flex items-center gap-1.5 cursor-pointer transition-all duration-200 shrink-0 ${
                 activeFormTab === 'user' 
-                  ? 'border-[#1B4332] text-[#1B4332] bg-white font-black' 
-                  : 'border-transparent text-gray-400 hover:text-gray-700'
+                  ? 'border-[#2D6A4F] text-[#2D6A4F] bg-emerald-50/40 font-black' 
+                  : 'border-transparent text-gray-400 hover:text-[#2D6A4F] hover:border-[#2D6A4F]/30'
               }`}
             >
-              <UserPlus className="h-3.5 w-3.5" />
-              <span>Create investor</span>
+              <UserPlus className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Register User / Manager</span>
             </button>
 
             <button
@@ -1113,8 +1119,8 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
             {activeFormTab === 'user' && (
               <form onSubmit={handleCreateUser} className="space-y-4">
                 <div className="flex items-center gap-2 mb-4 border-b border-gray-50 pb-2">
-                  <UserPlus className="text-emerald-600 h-4 w-4" />
-                  <h3 className="font-sans font-bold text-sm text-gray-800">Register New Investor Client</h3>
+                  <UserPlus className="text-emerald-700 h-4 w-4" />
+                  <h3 className="font-sans font-bold text-sm text-gray-800">Register New User / Farm Manager Account</h3>
                 </div>
 
                 {userSuccessMessage && (
@@ -1126,7 +1132,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Full client name</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Full Account Name</label>
                     <input
                       type="text"
                       required
@@ -1138,7 +1144,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Primary username</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Primary Username</label>
                     <input
                       type="text"
                       required
@@ -1152,7 +1158,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Email address</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Email Address</label>
                     <input
                       type="email"
                       required
@@ -1164,7 +1170,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
 
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Primary telephone</label>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Primary Telephone</label>
                     <input
                       type="tel"
                       required
@@ -1176,17 +1182,41 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">System Permission Role</label>
-                  <select
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50 focus:outline-[#1B4332]"
-                  >
-                    <option value="investor">Investor (Read-Only Portfolio client)</option>
-                    <option value="farm_manager">Farm Manager (Updates & documents supervisor)</option>
-                    <option value="admin">Super Admin (Full root access)</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">System Permission Role</label>
+                    <select
+                      value={newRole}
+                      onChange={(e) => setNewRole(e.target.value)}
+                      className="w-full text-xs border border-gray-200 rounded-lg p-2.5 bg-gray-50 focus:outline-[#1B4332]"
+                    >
+                      <option value="investor">Investor (Read-Only Portfolio Client)</option>
+                      <option value="farm_manager">Farm Manager (Updates & Documents Supervisor)</option>
+                      <option value="admin">Super Admin (Full Root Access)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400">Account Access Password (Defined by Admin)</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        placeholder="e.g. FarmManager2026!"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full text-xs border border-gray-200 rounded-lg p-2.5 pr-10 bg-gray-50 focus:outline-[#1B4332]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <button
@@ -1194,7 +1224,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
                   className="w-full bg-[#1B4332] hover:bg-[#2D6A4F] text-white text-xs font-mono font-bold p-3 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  <span>Register client profile</span>
+                  <span>Register Account Profile</span>
                 </button>
               </form>
             )}

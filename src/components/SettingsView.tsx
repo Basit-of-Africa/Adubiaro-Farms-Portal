@@ -26,7 +26,10 @@ import {
   Megaphone,
   HardDrive,
   Clock,
-  Briefcase
+  Briefcase,
+  Eye,
+  EyeOff,
+  Mail
 } from 'lucide-react';
 import { User, UserRole, SystemSettings } from '../types';
 
@@ -37,7 +40,7 @@ interface SettingsViewProps {
   refreshSignal?: number;
 }
 
-type SettingsTab = 'config' | 'backups' | 'roles' | 'branding';
+type SettingsTab = 'config' | 'backups' | 'roles' | 'branding' | 'emails';
 
 export default function SettingsView({ user, token, triggerRefreshSignal, refreshSignal }: SettingsViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<SettingsTab>('config');
@@ -71,7 +74,42 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
   const [newUserEmail, setNewUserEmail] = useState<string>('');
   const [newUserPhone, setNewUserPhone] = useState<string>('');
   const [newUserRole, setNewUserRole] = useState<UserRole>(UserRole.INVESTOR);
+  const [newUserPassword, setNewUserPassword] = useState<string>('');
+  const [showUserPassword, setShowUserPassword] = useState<boolean>(false);
   const [creatingUser, setCreatingUser] = useState<boolean>(false);
+
+  // --- Email Configurations States ---
+  const [emailServiceType, setEmailServiceType] = useState<'simulation' | 'smtp' | 'brevo'>('simulation');
+  const [smtpHost, setSmtpHost] = useState<string>('');
+  const [smtpPort, setSmtpPort] = useState<number>(587);
+  const [smtpSecure, setSmtpSecure] = useState<boolean>(false);
+  const [smtpUser, setSmtpUser] = useState<string>('');
+  const [smtpPass, setSmtpPass] = useState<string>('');
+  const [smtpFrom, setSmtpFrom] = useState<string>('noreply@adubiaro.com');
+  const [brevoApiKey, setBrevoApiKey] = useState<string>('');
+  const [brevoSenderEmail, setBrevoSenderEmail] = useState<string>('noreply@adubiaro.com');
+  const [brevoSenderName, setBrevoSenderName] = useState<string>('Adubiaro Farms');
+
+  const [testRecipientEmail, setTestRecipientEmail] = useState<string>('');
+  const [testingEmail, setTestingEmail] = useState<boolean>(false);
+  const [testEmailSuccess, setTestEmailSuccess] = useState<string | null>(null);
+  const [testEmailError, setTestEmailError] = useState<string | null>(null);
+  const [savingEmailConfig, setSavingEmailConfig] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (sysSettings) {
+      setEmailServiceType(sysSettings.emailServiceType || 'simulation');
+      setSmtpHost(sysSettings.smtpHost || '');
+      setSmtpPort(sysSettings.smtpPort !== undefined ? sysSettings.smtpPort : 587);
+      setSmtpSecure(sysSettings.smtpSecure !== undefined ? sysSettings.smtpSecure : false);
+      setSmtpUser(sysSettings.smtpUser || '');
+      setSmtpPass(sysSettings.smtpPass || '');
+      setSmtpFrom(sysSettings.smtpFrom || 'noreply@adubiaro.com');
+      setBrevoApiKey(sysSettings.brevoApiKey || '');
+      setBrevoSenderEmail(sysSettings.brevoSenderEmail || 'noreply@adubiaro.com');
+      setBrevoSenderName(sysSettings.brevoSenderName || 'Adubiaro Farms');
+    }
+  }, [sysSettings]);
 
   // --- Fetch Operations ---
   const fetchSysSettings = async () => {
@@ -179,6 +217,79 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
     }
   };
 
+  const handleSaveEmailConfig = async () => {
+    if (!sysSettings) return;
+    try {
+      setSavingEmailConfig(true);
+      setSaveSysSuccess(null);
+      setSaveSysError(null);
+
+      const updatedSettings: SystemSettings = {
+        ...sysSettings,
+        emailServiceType,
+        smtpHost,
+        smtpPort,
+        smtpSecure,
+        smtpUser,
+        smtpPass,
+        smtpFrom,
+        brevoApiKey,
+        brevoSenderEmail,
+        brevoSenderName
+      };
+
+      await handleSaveSettings(updatedSettings);
+    } catch (err: any) {
+      setSaveSysError(err.message || 'Failed to save email configuration.');
+    } finally {
+      setSavingEmailConfig(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    if (!testRecipientEmail) {
+      setTestEmailError('Please enter a recipient email address to send the test.');
+      return;
+    }
+    try {
+      setTestingEmail(true);
+      setTestEmailSuccess(null);
+      setTestEmailError(null);
+
+      const res = await fetch('/api/admin/email/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          emailServiceType,
+          smtpHost,
+          smtpPort,
+          smtpSecure,
+          smtpUser,
+          smtpPass,
+          smtpFrom,
+          brevoApiKey,
+          brevoSenderEmail,
+          brevoSenderName,
+          testRecipient: testRecipientEmail
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to dispatch test email');
+      }
+
+      setTestEmailSuccess(data.message || 'Test email dispatched successfully! Look up the outbox logs or your inbox.');
+    } catch (err: any) {
+      setTestEmailError(err.message || 'Error occurred while executing test delivery.');
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
   // Triggers manual system backup snapshot
   const handleTriggerBackup = async () => {
     if (triggeringBackup) return;
@@ -226,7 +337,8 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
           name: newFullName.trim(),
           email: newUserEmail.trim(),
           phone: newUserPhone.trim(),
-          role: newUserRole
+          role: newUserRole,
+          password: newUserPassword
         })
       });
 
@@ -244,6 +356,8 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
       setNewUserEmail('');
       setNewUserPhone('');
       setNewUserRole(UserRole.INVESTOR);
+      setNewUserPassword('');
+      setShowUserPassword(false);
       setShowAddUserForm(false);
       
       // Refresh User List
@@ -374,6 +488,19 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
         >
           <Palette className="h-4 w-4" />
           <span>UI Branding Settings</span>
+        </button>
+
+        <button
+          id="btn-subtab-emails"
+          onClick={() => setActiveSubTab('emails')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold font-sans transition-all duration-300 cursor-pointer ${
+            activeSubTab === 'emails'
+              ? 'bg-[#1B4332] text-white shadow-md'
+              : 'text-[#2c3e35]/70 hover:bg-white/60 hover:text-[#1B4332]'
+          }`}
+        >
+          <Mail className="h-4 w-4" />
+          <span>Email Configuration</span>
         </button>
       </div>
 
@@ -859,6 +986,28 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                       </select>
                     </div>
 
+                    <div>
+                      <label className="block text-[9.5px] font-mono font-bold uppercase text-gray-500 mb-1">Account Access Password *</label>
+                      <div className="relative">
+                        <input
+                          type={showUserPassword ? 'text' : 'password'}
+                          required
+                          placeholder="e.g. FarmManager2026!"
+                          value={newUserPassword}
+                          onChange={(e) => setNewUserPassword(e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-xl px-3.5 pr-10 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm font-sans"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowUserPassword(!showUserPassword)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
+                          title={showUserPassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
                   </div>
 
                   <div className="flex justify-end gap-3 pt-2">
@@ -1123,6 +1272,269 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
 
                   </div>
 
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* --- 5. EMAIL CONFIGURATION TAB --- */}
+        {activeSubTab === 'emails' && (
+          <div className="space-y-8 animate-fade-in">
+            <div className="border-b border-gray-100 pb-4">
+              <h3 className="text-base font-extrabold text-gray-800 font-sans">Email Service Configurations</h3>
+              <p className="text-[11.5px] text-gray-500 mt-1">
+                Configure your outbound notification system. Dispatched welcoming credentials, portal alerts, and financial reports will route through your chosen channel.
+              </p>
+            </div>
+
+            {loadingSysSettings || !sysSettings ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <RefreshCw className="animate-spin text-[#1B4332] h-7 w-7" />
+                <span className="text-xs font-mono text-gray-400">Loading email attributes...</span>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Save status alerts */}
+                {saveSysSuccess && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs flex items-center gap-2.5 animate-slide-up font-medium">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <span>{saveSysSuccess}</span>
+                  </div>
+                )}
+                {saveSysError && (
+                  <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-xs flex items-center gap-2.5 animate-slide-up font-medium">
+                    <ShieldAlert className="h-5 w-5 text-red-600 shrink-0" />
+                    <span>{saveSysError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left Form Column */}
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-[#FBF9F4]/40 p-5 border border-gray-150 rounded-2xl space-y-5">
+                      <h4 className="text-xs font-bold font-mono uppercase text-[#1B4332] tracking-wider leading-none">Service Settings</h4>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">Integration Channel Method</label>
+                          <select
+                            value={emailServiceType}
+                            onChange={(e) => setEmailServiceType(e.target.value as any)}
+                            className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm cursor-pointer"
+                          >
+                            <option value="simulation">Simulated Outbox Logging (Development & Demo mode)</option>
+                            <option value="smtp">Real Custom SMTP Server (Nodemailer protocol)</option>
+                            <option value="brevo">Brevo SMTP Third-Party API (Recommended)</option>
+                          </select>
+                        </div>
+
+                        {emailServiceType === 'simulation' && (
+                          <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500 leading-relaxed font-sans">
+                            💡 <strong>Simulated Logging Mode is currently selected.</strong> No real emails will be dispatched to recipients. 
+                            Instead, all outbox items are instantly saved inside the local outbox logs database. You can review them anytime under 
+                            the simulated emails outbox or Settings dashboards. Perfect for zero-risk sandboxed testing!
+                          </div>
+                        )}
+
+                        {emailServiceType === 'smtp' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">SMTP Server Hostname *</label>
+                              <input
+                                type="text"
+                                required
+                                value={smtpHost}
+                                onChange={(e) => setSmtpHost(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="e.g. smtp.mailgun.org"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">SMTP Server Port *</label>
+                              <input
+                                type="number"
+                                required
+                                value={smtpPort}
+                                onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm font-mono"
+                                placeholder="587"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">SMTP Username *</label>
+                              <input
+                                type="text"
+                                required
+                                value={smtpUser}
+                                onChange={(e) => setSmtpUser(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="e.g. postmaster@yourdomain.com"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">SMTP Password *</label>
+                              <input
+                                type="password"
+                                required
+                                value={smtpPass}
+                                onChange={(e) => setSmtpPass(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="••••••••••••••••••••"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">Default From Sender Address *</label>
+                              <input
+                                type="text"
+                                required
+                                value={smtpFrom}
+                                onChange={(e) => setSmtpFrom(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="Adubiaro Farms <noreply@adubiaro.com>"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-2.5 pt-4">
+                              <input
+                                type="checkbox"
+                                id="smtpSecureCheckbox"
+                                checked={smtpSecure}
+                                onChange={(e) => setSmtpSecure(e.target.checked)}
+                                className="h-4.5 w-4.5 rounded border-gray-300 text-[#1B4332] focus:ring-[#1B4332] cursor-pointer"
+                              />
+                              <label htmlFor="smtpSecureCheckbox" className="text-[10.5px] font-bold font-mono uppercase text-gray-600 select-none cursor-pointer">
+                                Enforce SSL/TLS Secure transport
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
+                        {emailServiceType === 'brevo' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">Brevo API Key (v3) *</label>
+                              <input
+                                type="password"
+                                required
+                                value={brevoApiKey}
+                                onChange={(e) => setBrevoApiKey(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm font-mono"
+                                placeholder="xkeysib-..."
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">Brevo Sender Email *</label>
+                              <input
+                                type="email"
+                                required
+                                value={brevoSenderEmail}
+                                onChange={(e) => setBrevoSenderEmail(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="noreply@yourdomain.com"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-mono font-bold uppercase text-gray-500 mb-1">Brevo Sender Name *</label>
+                              <input
+                                type="text"
+                                required
+                                value={brevoSenderName}
+                                onChange={(e) => setBrevoSenderName(e.target.value)}
+                                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                                placeholder="e.g. Adubiaro Farms"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSaveEmailConfig}
+                        disabled={savingEmailConfig}
+                        className="bg-[#1B4332] hover:bg-[#2D6A4F] disabled:bg-gray-400 text-white text-xs font-mono font-bold px-6 py-3 rounded-xl flex items-center gap-2 cursor-pointer shadow transition-all duration-200 select-none"
+                      >
+                        {savingEmailConfig ? (
+                          <>
+                            <RefreshCw className="animate-spin h-4 w-4 animate-reverse" />
+                            <span>Saving Configurations...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4" />
+                            <span>Save Email Configuration</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Playground Column */}
+                  <div className="space-y-6">
+                    <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 space-y-4 font-sans">
+                      <div className="flex items-center gap-2 text-xs font-bold font-mono uppercase text-gray-600">
+                        <Sparkles className="h-4 w-4 text-[#1B4332]" />
+                        <span>Outbound Test Playground</span>
+                      </div>
+                      
+                      <p className="text-[10.5px] text-gray-500 leading-normal">
+                        Verify your integration instantly before rolling it out systemwide. Dispatches a beautifully formatted system diagnostic report email.
+                      </p>
+
+                      <div className="border-t border-gray-200 pt-4 space-y-3">
+                        <div>
+                          <label className="block text-[9.5px] font-mono font-bold uppercase text-gray-500 mb-1">Recipient Destination Email</label>
+                          <input
+                            type="email"
+                            value={testRecipientEmail}
+                            onChange={(e) => setTestRecipientEmail(e.target.value)}
+                            placeholder="e.g. administrator@example.com"
+                            className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 outline-none focus:border-[#1B4332] shadow-sm"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleTestEmail}
+                          disabled={testingEmail || !testRecipientEmail}
+                          className="w-full bg-[#1B4332] hover:bg-[#2D6A4F] disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-mono font-bold p-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all duration-200 select-none"
+                        >
+                          {testingEmail ? (
+                            <>
+                              <RefreshCw className="animate-spin h-3.5 w-3.5" />
+                              <span>Sending Diagnostic...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-3.5 w-3.5" />
+                              <span>Dispatch Live Test Email</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Playground Feedback Alerts */}
+                      {testEmailSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-[10.5px] text-emerald-800 leading-normal animate-slide-up font-sans">
+                          🎉 <strong>Success:</strong> {testEmailSuccess}
+                        </div>
+                      )}
+                      {testEmailError && (
+                        <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-[10.5px] text-red-800 leading-normal animate-slide-up font-sans font-medium">
+                          ❌ <strong>Dispatch Failed:</strong> {testEmailError}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

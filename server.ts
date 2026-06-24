@@ -15,7 +15,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import nodemailer from 'nodemailer';
 import { createServer as createViteServer } from 'vite';
 import { initializeApp as initializeFirebaseApp } from 'firebase/app';
-import { initializeFirestore, doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore';
+import { initializeFirestore, doc, setDoc, getDoc, getDocs, collection } from 'firebase/firestore/lite';
 import {
   User,
   UserRole,
@@ -93,26 +93,90 @@ function getCloudinary() {
   return cloudinary;
 }
 
-// Setup lazy SMTP email configuration
-let mailTransporter: any = null;
-function getMailTransporter() {
-  if (!mailTransporter && process.env.EMAIL_HOST) {
-    try {
-      mailTransporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST,
-        port: parseInt(process.env.EMAIL_PORT || '587'),
-        secure: process.env.EMAIL_USE_TLS === 'false' ? false : true,
-        auth: {
-          user: process.env.EMAIL_HOST_USER,
-          pass: process.env.EMAIL_HOST_PASSWORD
-        }
-      });
-      console.log('✅ SMTP Mail Transporter configured successfully');
-    } catch (e) {
-      console.error('❌ SMTP configuration failed:', e);
+// Setup dynamic SMTP and Brevo email configuration helpers
+async function sendSmtpEmail({
+  host,
+  port,
+  secure,
+  user,
+  pass,
+  from,
+  to,
+  subject,
+  text,
+  html
+}: {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: secure !== false,
+    auth: {
+      user,
+      pass
     }
+  });
+
+  await transporter.sendMail({
+    from: from || 'Adubiaro Farms <noreply@adubiaro.com>',
+    to,
+    subject,
+    text,
+    html
+  });
+}
+
+async function sendBrevoEmail({
+  apiKey,
+  senderName,
+  senderEmail,
+  to,
+  subject,
+  text,
+  html
+}: {
+  apiKey: string;
+  senderName: string;
+  senderEmail: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const url = 'https://api.brevo.com/v3/smtp/email';
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      sender: {
+        name: senderName || 'Adubiaro Farms',
+        email: senderEmail || 'noreply@adubiaro.com'
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html,
+      textContent: text
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Brevo API Error (${response.status}): ${errText}`);
   }
-  return mailTransporter;
 }
 
 // Database Scheme
@@ -388,7 +452,17 @@ function getInitialDb(): DatabaseSchema {
       logoText: 'ADUBIARO',
       accentColor: 'emerald',
       announcementBanner: '',
-      bannerType: 'none'
+      bannerType: 'none',
+      emailServiceType: 'simulation',
+      smtpHost: process.env.EMAIL_HOST || '',
+      smtpPort: parseInt(process.env.EMAIL_PORT || '587'),
+      smtpSecure: process.env.EMAIL_USE_TLS === 'false' ? false : true,
+      smtpUser: process.env.EMAIL_HOST_USER || '',
+      smtpPass: process.env.EMAIL_HOST_PASSWORD || '',
+      smtpFrom: process.env.DEFAULT_FROM_EMAIL || 'Adubiaro Farms <noreply@adubiaro.com>',
+      brevoApiKey: '',
+      brevoSenderEmail: 'noreply@adubiaro.com',
+      brevoSenderName: 'Adubiaro Farms'
     }
   };
 }
@@ -427,10 +501,8 @@ try {
   if (firebaseConfig) {
     const fApp = initializeFirebaseApp(firebaseConfig);
     const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_DATABASE_ID || '(default)';
-    firestoreDb = initializeFirestore(fApp, {
-      experimentalForceLongPolling: true
-    }, dbId);
-    console.log(`✅ Firebase Firestore client successfully initialized on database: "${dbId}" with long-polling force enablement.`);
+    firestoreDb = initializeFirestore(fApp, {}, dbId);
+    console.log(`✅ Firebase Firestore client (Lite mode) successfully initialized on database: "${dbId}".`);
   } else {
     console.warn('⚠️ No Firebase configuration found (neither env vars nor JSON config). Firestore cloud backing disabled.');
   }
@@ -529,12 +601,17 @@ async function initFirestore() {
   try {
     await loadDbFromFirestore();
     
-    // Check if db is completely empty
-    if (db.users.length === 0) {
+    // Check if both the settings doc doesn't exist and users are empty
+    // This allows users to completely clear their users list without triggering a re-seed on restart.
+    const settingsDocExists = await getDoc(doc(firestoreDb, 'settings', 'standalone')).then(d => d.exists()).catch(() => false);
+    
+    if (!settingsDocExists && db.users.length === 0) {
       console.log('🌱 Firestore is empty. Initializing and seeding Firestore database...');
       db = getInitialDb();
       await saveDbToFirestore();
       console.log('✅ Firestore seeded successfully.');
+    } else {
+      console.log('ℹ️ Firestore already initialized / seeded. Skipping seeding step.');
     }
   } catch (err) {
     console.error('❌ Failed to initialize/sync Firestore database:', err);
@@ -1210,12 +1287,8 @@ function saveDb() {
 // Simulated real-time triggers for notification emails
 async function dispatchEmail(to: string, subject: string, textBody: string, htmlBody: string, category: string) {
   const settings = getSettings();
-  if (!settings.enableEmailSimulation) {
-    console.log('🔇 Email simulation disabled by Super Admin. Bypassing email dispatch.');
-    return;
-  }
 
-  // 1. Appends to internal simulated log
+  // 1. Appends to internal simulated log (always record so admins can see in outbox tab)
   const newEmail: SimulatedEmail = {
     id: 'email-' + Date.now().toString(),
     to,
@@ -1228,20 +1301,49 @@ async function dispatchEmail(to: string, subject: string, textBody: string, html
   db.simulatedEmails.unshift(newEmail);
   saveDb();
 
-  // 2. Tries lazy real SMTP send
-  const transporter = getMailTransporter();
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: process.env.DEFAULT_FROM_EMAIL || 'Adubiaro Farms <noreply@adubiaro.com>',
-        to,
-        subject,
-        text: textBody,
-        html: htmlBody
-      });
-      console.log(`📧 Fully routed REAL SMTP Email to ${to}: ${subject}`);
-    } catch (e) {
-      console.error('📧 SMTP Send issue (skipping, logged in simulated outbox):', e);
+  // 2. Real dispatch based on configuration
+  const svc = settings.emailServiceType || 'simulation';
+
+  if (svc === 'smtp') {
+    if (settings.smtpHost) {
+      try {
+        await sendSmtpEmail({
+          host: settings.smtpHost,
+          port: settings.smtpPort || 587,
+          secure: settings.smtpSecure !== false,
+          user: settings.smtpUser || '',
+          pass: settings.smtpPass || '',
+          from: settings.smtpFrom || 'Adubiaro Farms <noreply@adubiaro.com>',
+          to,
+          subject,
+          text: textBody,
+          html: htmlBody
+        });
+        console.log(`📧 Fully routed REAL SMTP Email to ${to}: ${subject}`);
+      } catch (e: any) {
+        console.error('📧 SMTP Send issue (logged in simulated outbox):', e);
+      }
+    } else {
+      console.warn('⚠️ SMTP Email service enabled but no host configured.');
+    }
+  } else if (svc === 'brevo') {
+    if (settings.brevoApiKey) {
+      try {
+        await sendBrevoEmail({
+          apiKey: settings.brevoApiKey,
+          senderName: settings.brevoSenderName || 'Adubiaro Farms',
+          senderEmail: settings.brevoSenderEmail || 'noreply@adubiaro.com',
+          to,
+          subject,
+          text: textBody,
+          html: htmlBody
+        });
+        console.log(`📧 Fully routed REAL Brevo API Email to ${to}: ${subject}`);
+      } catch (e: any) {
+        console.error('📧 Brevo API Send issue (logged in simulated outbox):', e);
+      }
+    } else {
+      console.warn('⚠️ Brevo Email service enabled but no API Key configured.');
     }
   } else {
     console.log(`📧 Simulated Email recorded in outbox to ${to}: ${subject}`);
@@ -1282,9 +1384,13 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   let isMatch = false;
-  if (user.role === UserRole.ADMIN && password === 'Admin@1234') isMatch = true;
-  if (user.role === UserRole.FARM_MANAGER && password === 'Manager@1234') isMatch = true;
-  if (user.role === UserRole.INVESTOR && password === 'Investor@1234') isMatch = true;
+  if (user.password && password === user.password) {
+    isMatch = true;
+  } else {
+    if (user.role === UserRole.ADMIN && password === 'Admin@1234') isMatch = true;
+    if (user.role === UserRole.FARM_MANAGER && password === 'Manager@1234') isMatch = true;
+    if (user.role === UserRole.INVESTOR && password === 'Investor@1234') isMatch = true;
+  }
 
   if (!isMatch) {
     return res.status(400).json({ error: 'Invalid login credentials' });
@@ -1929,7 +2035,7 @@ app.post('/api/users/create', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Restricted to super administrators.' });
   }
 
-  const { username, name, email, phone, role } = req.body;
+  const { username, name, email, phone, role, password } = req.body;
 
   // Unique username validation
   const existingUser = db.users.find(u => u.username === username);
@@ -1944,17 +2050,20 @@ app.post('/api/users/create', requireAuth, (req, res) => {
     name,
     email,
     phone,
-    role: (role as UserRole) || UserRole.INVESTOR
+    role: (role as UserRole) || UserRole.INVESTOR,
+    password: password || undefined
   };
 
   db.users.push(createdUser);
   saveDb();
 
   // Set default temporary password for welcome notification
-  let tempPassword = 'User@1234';
-  if (role === UserRole.FARM_MANAGER) tempPassword = 'Manager@1234';
-  if (role === UserRole.INVESTOR) tempPassword = 'Investor@1234';
-  if (role === UserRole.ADMIN) tempPassword = 'Admin@1234';
+  let tempPassword = password || 'User@1234';
+  if (!password) {
+    if (role === UserRole.FARM_MANAGER) tempPassword = 'Manager@1234';
+    if (role === UserRole.INVESTOR) tempPassword = 'Investor@1234';
+    if (role === UserRole.ADMIN) tempPassword = 'Admin@1234';
+  }
 
   // EMAIL TRIGGER 4: New user / investor account created → welcome email
   dispatchEmail(
@@ -2123,6 +2232,101 @@ app.post('/api/admin/assignments/create', requireAuth, (req, res) => {
   db.assignments.push(newAssign);
   saveDb();
   res.json(newAssign);
+});
+
+// Admin route to send a test email to verify credentials
+app.post('/api/admin/email/test', requireAuth, async (req, res) => {
+  const user = (req as any).user as User;
+  if (user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const {
+    emailServiceType,
+    smtpHost,
+    smtpPort,
+    smtpSecure,
+    smtpUser,
+    smtpPass,
+    smtpFrom,
+    brevoApiKey,
+    brevoSenderEmail,
+    brevoSenderName,
+    testRecipient
+  } = req.body;
+
+  if (!testRecipient) {
+    return res.status(400).json({ error: 'Test recipient email is required.' });
+  }
+
+  const subject = 'Adubiaro Farm Portal — Email Integration Test Successful!';
+  const textBody = 'Hello! This is a test email from your Adubiaro Farm Portal admin dashboard to verify that your email integration settings are configured correctly. If you received this, everything is working perfectly!';
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+      <h2 style="color: #1B4332; margin-top: 0;">🎉 Email Setup Successful!</h2>
+      <p>Dear Administrator,</p>
+      <p>This is an automated test email dispatched from your <strong>Adubiaro Farm Portal Control Center</strong>.</p>
+      <div style="background-color: #f4fbf7; border-left: 4px solid #2D6A4F; padding: 15px; margin: 15px 0; border-radius: 4px;">
+        <strong>Configuration Verified:</strong><br/>
+        • <strong>Selected Method:</strong> ${String(emailServiceType).toUpperCase()}<br/>
+        • <strong>Sender Address:</strong> ${emailServiceType === 'smtp' ? (smtpFrom || 'noreply@adubiaro.com') : `${brevoSenderName || 'Adubiaro Farms'} &lt;${brevoSenderEmail || 'noreply@adubiaro.com'}&gt;`}<br/>
+        • <strong>Verified At:</strong> ${new Date().toLocaleString()}
+      </div>
+      <p>Your portal notifications, investor welcome alerts, password settings, and payout alerts will now route seamlessly through this active profile!</p>
+      <p style="font-size: 11px; color: #888; margin-top: 25px; border-top: 1px solid #eee; padding-top: 10px;">
+        Sent from Adubiaro Farm Estate Portal Super Admin panel.
+      </p>
+    </div>
+  `;
+
+  try {
+    if (emailServiceType === 'smtp') {
+      if (!smtpHost) throw new Error('SMTP Host is required');
+      await sendSmtpEmail({
+        host: smtpHost,
+        port: parseInt(smtpPort || '587'),
+        secure: smtpSecure !== false,
+        user: smtpUser || '',
+        pass: smtpPass || '',
+        from: smtpFrom || 'Adubiaro Farms <noreply@adubiaro.com>',
+        to: testRecipient,
+        subject,
+        text: textBody,
+        html: htmlBody
+      });
+    } else if (emailServiceType === 'brevo') {
+      if (!brevoApiKey) throw new Error('Brevo API Key is required');
+      await sendBrevoEmail({
+        apiKey: brevoApiKey,
+        senderName: brevoSenderName || 'Adubiaro Farms',
+        senderEmail: brevoSenderEmail || 'noreply@adubiaro.com',
+        to: testRecipient,
+        subject,
+        text: textBody,
+        html: htmlBody
+      });
+    } else {
+      console.log(`📧 Test Email simulation to ${testRecipient}`);
+    }
+
+    // Also record it in outbox for review
+    const testSim: SimulatedEmail = {
+      id: 'test-email-' + Date.now().toString(),
+      to: testRecipient,
+      subject,
+      body: textBody,
+      htmlBody,
+      sentAt: new Date().toISOString(),
+      category: 'System Integration Test'
+    };
+    db.simulatedEmails.unshift(testSim);
+    saveDb();
+
+    res.json({ success: true, message: `Test email successfully routed and sent to ${testRecipient}!` });
+  } catch (err: any) {
+    console.error('❌ Test email send error:', err);
+    res.status(500).json({ error: err.message || 'Unknown error occurred during test send.' });
+  }
 });
 
 // Route to get list of emails sent (simulated outbox logs)
@@ -2517,6 +2721,16 @@ app.put('/api/admin/settings', requireAuth, (req, res) => {
   if (newSettings.accentColor !== undefined) currentSettings.accentColor = newSettings.accentColor;
   if (newSettings.announcementBanner !== undefined) currentSettings.announcementBanner = newSettings.announcementBanner;
   if (newSettings.bannerType !== undefined) currentSettings.bannerType = newSettings.bannerType;
+  if (newSettings.emailServiceType !== undefined) currentSettings.emailServiceType = newSettings.emailServiceType;
+  if (newSettings.smtpHost !== undefined) currentSettings.smtpHost = newSettings.smtpHost;
+  if (newSettings.smtpPort !== undefined) currentSettings.smtpPort = parseInt(newSettings.smtpPort !== null ? newSettings.smtpPort : '587');
+  if (newSettings.smtpSecure !== undefined) currentSettings.smtpSecure = Boolean(newSettings.smtpSecure);
+  if (newSettings.smtpUser !== undefined) currentSettings.smtpUser = newSettings.smtpUser;
+  if (newSettings.smtpPass !== undefined) currentSettings.smtpPass = newSettings.smtpPass;
+  if (newSettings.smtpFrom !== undefined) currentSettings.smtpFrom = newSettings.smtpFrom;
+  if (newSettings.brevoApiKey !== undefined) currentSettings.brevoApiKey = newSettings.brevoApiKey;
+  if (newSettings.brevoSenderEmail !== undefined) currentSettings.brevoSenderEmail = newSettings.brevoSenderEmail;
+  if (newSettings.brevoSenderName !== undefined) currentSettings.brevoSenderName = newSettings.brevoSenderName;
 
   // React to database mode shift on the fly
   if (currentSettings.databaseMode === 'local_json') {
