@@ -474,8 +474,20 @@ let db: DatabaseSchema = getInitialDb();
 
 // Initialize Firebase Firestore client from config
 let firestoreDb: any = null;
+let firebaseConfig: any = null;
+let firebaseDiagnosticResult: {
+  isValidConfig: boolean;
+  canConnect: boolean;
+  errorType: 'none' | 'config' | 'network' | 'auth_permission' | 'unknown';
+  errorMessage: string | null;
+} = {
+  isValidConfig: false,
+  canConnect: false,
+  errorType: 'none',
+  errorMessage: 'Firebase diagnostics have not completed.'
+};
+
 try {
-  let firebaseConfig: any = null;
   const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
 
   if (process.env.FIREBASE_CONFIG) {
@@ -511,6 +523,100 @@ try {
   }
 } catch (e) {
   console.error('❌ Failed to initialize Firebase Firestore:', e);
+}
+
+/**
+ * Diagnostic step that verifies the Firebase App configuration object is correctly initialized
+ * before attempting any Firestore operations.
+ * Error handling clearly distinguishes between network connectivity issues and authentication/permission-denied issues.
+ */
+async function runFirebaseDiagnostics(config: any): Promise<{
+  isValidConfig: boolean;
+  canConnect: boolean;
+  errorType: 'none' | 'config' | 'network' | 'auth_permission' | 'unknown';
+  errorMessage: string | null;
+}> {
+  console.log('🔍 [Firebase Diagnostic] Starting detailed verification of Firebase App configuration object...');
+  
+  if (!config) {
+    const msg = 'No configuration object found. Firebase credentials are empty.';
+    console.warn(`⚠️ [Firebase Diagnostic] ${msg}`);
+    return { isValidConfig: false, canConnect: false, errorType: 'config', errorMessage: msg };
+  }
+
+  // 1. Verify required keys
+  const requiredFields = ['apiKey', 'projectId'];
+  const missingFields = requiredFields.filter(f => !config[f]);
+  if (missingFields.length > 0) {
+    const msg = `Configuration lacks necessary Firebase fields: ${missingFields.join(', ')}`;
+    console.warn(`⚠️ [Firebase Diagnostic] ${msg}`);
+    return { isValidConfig: false, canConnect: false, errorType: 'config', errorMessage: msg };
+  }
+
+  console.log('✅ [Firebase Diagnostic] Firebase configuration object verified successfully.');
+  console.log(`ℹ️ [Firebase Diagnostic] Target Project: "${config.projectId}", database: "${config.firestoreDatabaseId || '(default)'}"`);
+
+  if (!firestoreDb) {
+    const msg = 'Firebase Firestore client was not initialized even though a configuration was provided.';
+    console.error(`❌ [Firebase Diagnostic] ${msg}`);
+    return { isValidConfig: true, canConnect: false, errorType: 'config', errorMessage: msg };
+  }
+
+  // 2. Perform a connection probe (test read) to Firestore to verify connection/permissions
+  try {
+    console.log('⚡ [Firebase Diagnostic] Performing diagnostic connectivity probe to Firestore...');
+    // We attempt to read the settings document. In Firestore Lite, this goes directly to the server.
+    const testDocRef = doc(firestoreDb, 'settings', 'standalone');
+    await getDoc(testDocRef);
+    console.log('🎉 [Firebase Diagnostic] Connectivity probe succeeded! Firestore client is fully online and responsive.');
+    return { isValidConfig: true, canConnect: true, errorType: 'none', errorMessage: null };
+  } catch (error: any) {
+    const errMsg = error.message || String(error);
+    const errCode = error.code || '';
+    
+    console.error(`❌ [Firebase Diagnostic] Firestore connectivity probe failed! Error message: "${errMsg}" (Code: ${errCode})`);
+
+    // 3. Classify error type: network connectivity vs authentication/permissions
+    const lowercaseMsg = errMsg.toLowerCase();
+    const lowercaseCode = String(errCode).toLowerCase();
+    
+    const isAuthOrPermission = 
+      lowercaseMsg.includes('permission') || 
+      lowercaseMsg.includes('insufficient') ||
+      lowercaseMsg.includes('unauthorized') || 
+      lowercaseMsg.includes('unauthenticated') ||
+      lowercaseMsg.includes('auth/') || 
+      lowercaseMsg.includes('api key') ||
+      lowercaseMsg.includes('invalid-credential') ||
+      lowercaseMsg.includes('forbidden') ||
+      lowercaseCode.includes('permission-denied') || 
+      lowercaseCode.includes('unauthenticated');
+
+    const isNetwork = 
+      lowercaseMsg.includes('offline') || 
+      lowercaseMsg.includes('network') || 
+      lowercaseMsg.includes('timeout') || 
+      lowercaseMsg.includes('getaddrinfo') || 
+      lowercaseMsg.includes('connect') ||
+      lowercaseMsg.includes('dns') ||
+      lowercaseMsg.includes('econnrefused') || 
+      lowercaseMsg.includes('etimedout') ||
+      lowercaseMsg.includes('unreachable');
+
+    if (isAuthOrPermission) {
+      const diagnosis = 'AUTHENTICATION & PERMISSION ISSUE: Your credentials or API key may be incorrect or lack database privileges, or your Security Rules are preventing this operation. Please verify firestore.rules and your service account permissions.';
+      console.error(`🛡️ [Firebase Diagnostic] CLASSIFICATION: ${diagnosis}`);
+      return { isValidConfig: true, canConnect: false, errorType: 'auth_permission', errorMessage: `${errMsg} (Classification: ${diagnosis})` };
+    } else if (isNetwork) {
+      const diagnosis = 'NETWORK CONNECTIVITY ISSUE: Unable to establish a network socket with the Google/Firebase APIs. Please verify your internet connection, DNS configuration, and make sure standard TCP outbound traffic is not blocked.';
+      console.error(`🌐 [Firebase Diagnostic] CLASSIFICATION: ${diagnosis}`);
+      return { isValidConfig: true, canConnect: false, errorType: 'network', errorMessage: `${errMsg} (Classification: ${diagnosis})` };
+    } else {
+      const diagnosis = `UNCLASSIFIED INTEGRATION ISSUE: An unexpected error occurred: "${errMsg}".`;
+      console.error(`❓ [Firebase Diagnostic] CLASSIFICATION: ${diagnosis}`);
+      return { isValidConfig: true, canConnect: false, errorType: 'unknown', errorMessage: `${errMsg} (Classification: ${diagnosis})` };
+    }
+  }
 }
 
 // Helper for retrying Firestore operations with exponential backoff
@@ -627,6 +733,12 @@ async function saveDbToFirestore() {
 async function initFirestore() {
   if (!firestoreDb) {
     console.warn('⚠️ No Firestore client available. Falling back to Local Storage (local db.json).');
+    firebaseDiagnosticResult = {
+      isValidConfig: false,
+      canConnect: false,
+      errorType: 'config',
+      errorMessage: 'No Firebase client or configuration available.'
+    };
     loadLocalJsonDb();
     return;
   }
@@ -646,6 +758,23 @@ async function initFirestore() {
   }
 
   if (isExplicitlyOffline) {
+    firebaseDiagnosticResult = {
+      isValidConfig: true,
+      canConnect: false,
+      errorType: 'none',
+      errorMessage: 'Local JSON Database mode is explicitly enforced (Offline).'
+    };
+    loadLocalJsonDb();
+    return;
+  }
+
+  // Run detailed diagnostic connectivity and permission probe!
+  const diagnostics = await runFirebaseDiagnostics(firebaseConfig);
+  firebaseDiagnosticResult = diagnostics;
+
+  if (!diagnostics.canConnect) {
+    console.error(`❌ Firestore Diagnostics failed: [${diagnostics.errorType.toUpperCase()}] ${diagnostics.errorMessage}`);
+    console.warn('⚠️ Falling back to Local Storage (local db.json) due to diagnostic connectivity failure.');
     loadLocalJsonDb();
     return;
   }
@@ -2792,7 +2921,14 @@ app.get('/api/admin/db-status', requireAuth, (req, res) => {
     dbHost,
     dbPort,
     dbName,
-    configured: isPostgresConfigured()
+    configured: isPostgresConfigured(),
+    firebase: {
+      initialized: !!firestoreDb,
+      configSource: process.env.FIREBASE_CONFIG ? 'env_json' : (process.env.FIREBASE_API_KEY ? 'env_vars' : (fs.existsSync(path.join(process.cwd(), 'firebase-applet-config.json')) ? 'config_file' : 'none')),
+      projectId: firebaseConfig?.projectId || null,
+      databaseId: firebaseConfig?.firestoreDatabaseId || '(default)',
+      diagnosticResult: firebaseDiagnosticResult
+    }
   });
 });
 

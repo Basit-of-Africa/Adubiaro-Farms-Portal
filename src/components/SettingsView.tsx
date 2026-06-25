@@ -31,7 +31,8 @@ import {
   EyeOff,
   Mail,
   Download,
-  Upload
+  Upload,
+  Cloud
 } from 'lucide-react';
 import { User, UserRole, SystemSettings } from '../types';
 
@@ -928,6 +929,106 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
               </div>
 
             </div>
+
+            {/* Firebase Diagnostics and Cloud Synchronization Status Card */}
+            {dbStatus?.firebase && (
+              <div className="bg-[#FBF9F4]/70 border border-gray-150 p-6 rounded-3xl space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2 text-left">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-amber-500/10 text-[#1B4332] rounded-xl">
+                      <Cloud className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-extrabold text-[#1B4332] font-sans">Firebase Firestore Diagnostics</h4>
+                      <p className="text-[11px] text-gray-500">Live active-probe diagnostic status of your cloud-backed Firestore layer.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold px-2 py-1 bg-gray-100 rounded-lg text-gray-500 uppercase">
+                      Source: {dbStatus.firebase.configSource}
+                    </span>
+                    {dbStatus.firebase.initialized && dbStatus.firebase.diagnosticResult?.canConnect ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold font-mono text-emerald-800 bg-emerald-50 rounded-lg border border-emerald-100">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        ONLINE & SYNCED
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold font-mono text-amber-800 bg-amber-50 rounded-lg border border-amber-100">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        BYPASSED / OFFLINE FALLBACK
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2 text-left">
+                    <h5 className="text-[10px] uppercase font-mono font-bold text-gray-400">Connection properties</h5>
+                    <div className="bg-white border border-gray-150 rounded-2xl p-4 space-y-2 text-xs font-mono">
+                      <div className="flex justify-between border-b border-gray-100 pb-1.5">
+                        <span className="text-gray-400">Active Project:</span>
+                        <span className="font-bold text-gray-700">{dbStatus.firebase.projectId || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-gray-100 pb-1.5">
+                        <span className="text-gray-400">Database ID:</span>
+                        <span className="font-bold text-gray-700">{dbStatus.firebase.databaseId || '(default)'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">SDK Mode:</span>
+                        <span className="font-bold text-gray-700">Firestore Lite Client</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-left">
+                    <h5 className="text-[10px] uppercase font-mono font-bold text-gray-400">Diagnostic outcome</h5>
+                    <div className={`rounded-2xl p-4 border flex flex-col justify-between h-full ${
+                      dbStatus.firebase.diagnosticResult?.canConnect 
+                        ? 'bg-emerald-50/40 border-emerald-100 text-emerald-800' 
+                        : dbStatus.firebase.diagnosticResult?.errorType === 'auth_permission'
+                        ? 'bg-red-50/50 border-red-100 text-red-800'
+                        : dbStatus.firebase.diagnosticResult?.errorType === 'network'
+                        ? 'bg-amber-50/50 border-amber-100 text-amber-800'
+                        : 'bg-gray-50 border-gray-200 text-gray-600'
+                    }`}>
+                      <div>
+                        <div className="flex items-center gap-1.5 font-bold uppercase text-[10px] font-mono mb-1">
+                          {dbStatus.firebase.diagnosticResult?.canConnect ? (
+                            <>🎉 Probe Succeeded</>
+                          ) : dbStatus.firebase.diagnosticResult?.errorType === 'auth_permission' ? (
+                            <>🛡️ Authentication / Permission Block</>
+                          ) : dbStatus.firebase.diagnosticResult?.errorType === 'network' ? (
+                            <>🌐 Network Connectivity Failure</>
+                          ) : (
+                            <>⚠️ Configuration Missing / Bypassed</>
+                          )}
+                        </div>
+                        <p className="text-[11px] leading-relaxed">
+                          {dbStatus.firebase.diagnosticResult?.errorMessage || 
+                            (dbStatus.firebase.diagnosticResult?.canConnect 
+                              ? 'Active connection probe successfully executed read operations on key metadata collections.' 
+                              : 'Diagnostics did not execute. Verify environment configurations.')}
+                        </p>
+                      </div>
+                      
+                      {!dbStatus.firebase.diagnosticResult?.canConnect && (
+                        <div className="mt-3 pt-2.5 border-t border-dashed border-gray-200 text-[10px] leading-tight font-sans">
+                          <span className="font-bold block uppercase font-mono text-[9px] mb-0.5">Troubleshooting Strategy:</span>
+                          {dbStatus.firebase.diagnosticResult?.errorType === 'auth_permission' ? (
+                            <span>Verify your API keys, Project ID, and ensure that your Firestore security rules (firestore.rules) allow unauthenticated or appropriate reads/writes.</span>
+                          ) : dbStatus.firebase.diagnosticResult?.errorType === 'network' ? (
+                            <span>Check for active container network boundaries, proxy/firewall constraints, or local internet availability of googleapis.com.</span>
+                          ) : (
+                            <span>Please run the Firebase setup flow or specify proper credentials (FIREBASE_CONFIG or individual keys) in Settings.</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Data Management Card */}
             <div className="bg-[#143427]/5 border border-[#2D6A4F]/20 p-6 rounded-3xl space-y-4">
