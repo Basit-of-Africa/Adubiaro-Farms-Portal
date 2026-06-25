@@ -929,15 +929,15 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
 
             </div>
 
-            {/* Deploy & Migration Persistence Tools Card */}
+            {/* Data Management Card */}
             <div className="bg-[#143427]/5 border border-[#2D6A4F]/20 p-6 rounded-3xl space-y-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-[#1B4332] rounded-xl text-white">
                   <Database className="h-5 w-5" />
                 </div>
                 <div className="text-left">
-                  <h4 className="text-sm font-extrabold text-[#1B4332] font-sans">Deploy & Migration Persistence Manager</h4>
-                  <p className="text-[11px] text-gray-500 mt-0.5">Safely backup or restore your entire system configuration, user profiles, financial metrics, and operational audits. Use this to easily migrate state across active server deployments!</p>
+                  <h4 className="text-sm font-extrabold text-[#1B4332] font-sans">Data Management</h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Download a complete, portable JSON snapshot of your active Firestore collections and local database records, or restore from a previously exported file to recover your data instantly.</p>
                 </div>
               </div>
 
@@ -946,10 +946,10 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                   <div>
                     <h5 className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 font-mono uppercase tracking-wider">
                       <Download className="h-4 w-4 text-[#1B4332]" />
-                      Export Comprehensive Database
+                      Download Firestore Snapshot
                     </h5>
                     <p className="text-[11px] text-gray-500 mt-1 leading-normal">
-                      Instantly package your complete live database state (including farms, investors, users, and financials) into a secure, portable JSON backup file. Keep this download safe before pushing new deployments.
+                      Export all live Firestore database collections—including estates, plots, investor relations, financial records, alerts, and outbox logs—into a secure JSON file.
                     </p>
                   </div>
                   <button
@@ -963,7 +963,7 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                     ) : (
                       <Download className="h-3.5 w-3.5" />
                     )}
-                    <span>Download Portability Snapshot</span>
+                    <span>Download Full JSON Snapshot</span>
                   </button>
                 </div>
 
@@ -971,10 +971,10 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                   <div>
                     <h5 className="text-xs font-extrabold text-gray-800 flex items-center gap-1.5 font-mono uppercase tracking-wider">
                       <Upload className="h-4 w-4 text-amber-600" />
-                      Restore / Import Database File
+                      Restore From Snapshot
                     </h5>
                     <p className="text-[11px] text-gray-500 mt-1 leading-normal">
-                      Overwrites the active environment database with a previously exported snapshot. Restored records will be automatically written to Firestore or Local Storage memory.
+                      Upload a previously exported JSON backup file to restore your entire database state. This will synchronize the data across your active Firestore database and current environment.
                     </p>
                   </div>
                   <div className="relative">
@@ -995,7 +995,7 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                       ) : (
                         <Upload className="h-3.5 w-3.5" />
                       )}
-                      <span>Upload Portability Snapshot</span>
+                      <span>Upload & Recover Data</span>
                     </label>
                   </div>
                 </div>
