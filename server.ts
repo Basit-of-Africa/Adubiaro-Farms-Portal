@@ -1466,6 +1466,184 @@ app.get('/api/admin/system-stats', requireAuth, (req, res) => {
   });
 });
 
+// Global Search (Filtered according to roles)
+app.get('/api/search', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  const query = (req.query.q as string || '').trim().toLowerCase();
+
+  if (!query) {
+    return res.json({
+      farms: [],
+      plots: [],
+      investorPlots: [],
+      documents: [],
+      financials: []
+    });
+  }
+
+  // Define collections to match
+  let matchedFarms: Farm[] = [];
+  let matchedPlots: FarmPlot[] = [];
+  let matchedInvestorPlots: InvestorPlot[] = [];
+  let matchedDocuments: Document[] = [];
+  let matchedFinancials: FinancialSummary[] = [];
+
+  if (user.role === UserRole.ADMIN) {
+    // 1. Farms
+    matchedFarms = db.farms.filter(f => 
+      f.name.toLowerCase().includes(query) ||
+      f.location.toLowerCase().includes(query) ||
+      f.state.toLowerCase().includes(query) ||
+      f.description.toLowerCase().includes(query)
+    );
+
+    // 2. Plots
+    matchedPlots = db.plots.filter(p => 
+      p.plotNumber.toLowerCase().includes(query) ||
+      p.cropType.toLowerCase().includes(query) ||
+      p.status.toLowerCase().includes(query)
+    );
+
+    // 3. Investor Plots
+    matchedInvestorPlots = db.investorPlots.filter(ip => {
+      const investorUser = db.users.find(u => u.id === ip.investorId);
+      const investorName = investorUser ? investorUser.name.toLowerCase() : '';
+      const investorEmail = investorUser ? investorUser.email.toLowerCase() : '';
+      return ip.contractRef.toLowerCase().includes(query) ||
+             investorName.includes(query) ||
+             investorEmail.includes(query);
+    });
+
+    // 4. Documents
+    matchedDocuments = db.documents.filter(d => 
+      d.title.toLowerCase().includes(query) ||
+      d.fileName.toLowerCase().includes(query) ||
+      d.description.toLowerCase().includes(query) ||
+      d.category.toLowerCase().includes(query)
+    );
+
+    // 5. Financials
+    matchedFinancials = db.financials.filter(f => 
+      f.period.toLowerCase().includes(query) ||
+      f.notes.toLowerCase().includes(query) ||
+      f.status.toLowerCase().includes(query) ||
+      f.year.toString().includes(query)
+    );
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    // Get assigned farm IDs
+    const assignedFarmIds = db.assignments
+      .filter(a => a.managerId === user.id && a.isActive)
+      .map(a => a.farmId);
+
+    // 1. Farms
+    matchedFarms = db.farms.filter(f => 
+      assignedFarmIds.includes(f.id) && (
+        f.name.toLowerCase().includes(query) ||
+        f.location.toLowerCase().includes(query) ||
+        f.state.toLowerCase().includes(query) ||
+        f.description.toLowerCase().includes(query)
+      )
+    );
+
+    // 2. Plots
+    matchedPlots = db.plots.filter(p => 
+      assignedFarmIds.includes(p.farmId) && (
+        p.plotNumber.toLowerCase().includes(query) ||
+        p.cropType.toLowerCase().includes(query) ||
+        p.status.toLowerCase().includes(query)
+      )
+    );
+
+    // 3. Investor Plots (Restrict to assigned farms' plots)
+    const assignedPlotIds = db.plots.filter(p => assignedFarmIds.includes(p.farmId)).map(p => p.id);
+    matchedInvestorPlots = db.investorPlots.filter(ip => 
+      assignedPlotIds.includes(ip.plotId) && (
+        ip.contractRef.toLowerCase().includes(query) ||
+        (db.users.find(u => u.id === ip.investorId)?.name.toLowerCase().includes(query) || false)
+      )
+    );
+
+    // 4. Documents (Only assigned farms' documents)
+    matchedDocuments = db.documents.filter(d => 
+      assignedFarmIds.includes(d.farmId) && (
+        d.title.toLowerCase().includes(query) ||
+        d.fileName.toLowerCase().includes(query) ||
+        d.description.toLowerCase().includes(query) ||
+        d.category.toLowerCase().includes(query)
+      )
+    );
+
+    // 5. Financials: FARM MANAGERS ARE RESTRICTED. Return empty.
+    matchedFinancials = [];
+  } else if (user.role === UserRole.INVESTOR) {
+    // Get owned plot IDs
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const ownedPlotIds = investorPlotsList.map(ip => ip.plotId);
+    
+    // Find farms for those owned plots
+    const ownedPlotFarms = db.plots.filter(p => ownedPlotIds.includes(p.id)).map(p => p.farmId);
+
+    // 1. Farms
+    matchedFarms = db.farms.filter(f => 
+      ownedPlotFarms.includes(f.id) && (
+        f.name.toLowerCase().includes(query) ||
+        f.location.toLowerCase().includes(query) ||
+        f.state.toLowerCase().includes(query) ||
+        f.description.toLowerCase().includes(query)
+      )
+    );
+
+    // 2. Plots
+    matchedPlots = db.plots.filter(p => 
+      ownedPlotIds.includes(p.id) && (
+        p.plotNumber.toLowerCase().includes(query) ||
+        p.cropType.toLowerCase().includes(query) ||
+        p.status.toLowerCase().includes(query)
+      )
+    );
+
+    // 3. Investor Plots (Only their own)
+    matchedInvestorPlots = investorPlotsList.filter(ip => 
+      ip.contractRef.toLowerCase().includes(query)
+    );
+
+    // 4. Documents (Only visible documents for their farms/plots)
+    matchedDocuments = db.documents.filter(d => {
+      const matchesQuery = d.title.toLowerCase().includes(query) ||
+                           d.fileName.toLowerCase().includes(query) ||
+                           d.description.toLowerCase().includes(query) ||
+                           d.category.toLowerCase().includes(query);
+      if (!matchesQuery) return false;
+
+      // Access checks:
+      if (d.visibility === DocumentVisibility.FARM) {
+        return ownedPlotFarms.includes(d.farmId);
+      } else if (d.visibility === DocumentVisibility.PLOT && d.plotId) {
+        return ownedPlotIds.includes(d.plotId);
+      }
+      return false;
+    });
+
+    // 5. Financials (Only theirs)
+    matchedFinancials = db.financials.filter(f => 
+      ownedPlotIds.includes(f.plotId) && (
+        f.period.toLowerCase().includes(query) ||
+        f.notes.toLowerCase().includes(query) ||
+        f.status.toLowerCase().includes(query) ||
+        f.year.toString().includes(query)
+      )
+    );
+  }
+
+  res.json({
+    farms: matchedFarms,
+    plots: matchedPlots,
+    investorPlots: matchedInvestorPlots,
+    documents: matchedDocuments,
+    financials: matchedFinancials
+  });
+});
+
 // List Farms (Filtered according to roles)
 app.get('/api/farms', requireAuth, (req, res) => {
   const user = (req as any).user as User;

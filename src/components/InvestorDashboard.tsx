@@ -14,7 +14,8 @@ import {
   TrendingUp, 
   User, 
   Award, 
-  Compass
+  Compass,
+  HelpCircle
 } from 'lucide-react';
 import { User as UserType, Farm } from '../types';
 
@@ -90,11 +91,21 @@ export default function InvestorDashboard({ user, token, onSelectFarm, refreshSi
           <p className="text-xs text-[#52B788]/90 max-w-lg mt-2 font-mono leading-relaxed">
             Monitor deed-allocated high-yield oil palm estates, certified boundary coordinates, and dynamic quarterly payout schedules in real-time.
           </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('start-onboarding-tour'))}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/10 text-white hover:text-[#52B788] px-4.5 py-2 rounded-xl text-xs font-mono font-bold transition duration-300 cursor-pointer shadow-sm active:scale-95"
+              title="Launch interactive getting started guide"
+            >
+              <HelpCircle className="h-4 w-4 text-[#D4A017]" />
+              <span>Interactive Portal Tour</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* KPI stats grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div id="investor-stats-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Metric 1 */}
         <div className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium hover:shadow-premium-hover transition duration-300 flex items-center gap-4">
           <div className="p-3.5 bg-[#1B4332]/5 text-[#1B4332] rounded-xl">
@@ -144,7 +155,7 @@ export default function InvestorDashboard({ user, token, onSelectFarm, refreshSi
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Owned Farms Left side - 5 columns */}
-        <div className="lg:col-span-5 space-y-4">
+        <div id="investor-farms-list" className="lg:col-span-5 space-y-4">
           <h2 className="font-sans font-extrabold text-xs text-[#2c3e35]/70 uppercase tracking-wider font-mono">My Farm holdings</h2>
           
           <div className="space-y-4">
@@ -182,7 +193,7 @@ export default function InvestorDashboard({ user, token, onSelectFarm, refreshSi
         </div>
 
         {/* Owned Plots specifications right side - 7 columns */}
-        <div className="lg:col-span-7 space-y-4">
+        <div id="investor-plots-table" className="lg:col-span-7 space-y-4">
           <h2 className="font-sans font-extrabold text-xs text-[#2c3e35]/70 uppercase tracking-wider font-mono">Acreage Plot Specifications</h2>
           
           <div className="bg-white rounded-2xl border border-[#2D6A4F]/10 shadow-premium overflow-hidden p-6 space-y-5">

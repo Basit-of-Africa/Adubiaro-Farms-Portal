@@ -15,6 +15,8 @@ import EmailOutbox from './components/EmailOutbox';
 import NotificationBell from './components/NotificationBell';
 import SettingsView from './components/SettingsView';
 import QuickActions from './components/QuickActions';
+import GlobalSearch from './components/GlobalSearch';
+import OnboardingTour from './components/OnboardingTour';
 import { User, UserRole } from './types';
 import { 
   Sprout, 
@@ -46,6 +48,36 @@ export default function App() {
   // Refresh signals allowing children tables to update whenever operations forms are saved
   const [refreshSignal, setRefreshSignal] = useState<number>(0);
   const triggerRefreshSignal = () => setRefreshSignal((prev) => prev + 1);
+
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
+
+  // Auto-launch tour for new investors and register manual trigger listener
+  useEffect(() => {
+    if (currentUser && currentUser.role === UserRole.INVESTOR) {
+      const isCompleted = localStorage.getItem(`onboarding_tour_completed_${currentUser.id}`);
+      if (isCompleted !== 'true') {
+        const timer = setTimeout(() => {
+          setIsTourOpen(true);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const handler = () => {
+      // Ensure we are back on the main dashboard tab so the stats and holding grids are rendered and visible
+      setActiveTab('dashboard');
+      setSelectedFarmId(null);
+      
+      // Delay slightly to allow the dashboard view to mount before calculating positions
+      setTimeout(() => {
+        setIsTourOpen(true);
+      }, 100);
+    };
+    window.addEventListener('start-onboarding-tour', handler);
+    return () => window.removeEventListener('start-onboarding-tour', handler);
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -208,12 +240,32 @@ export default function App() {
       <div className="flex-1 lg:pl-[280px] w-full min-h-screen">
         <main id="main-content" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full">
         
+        {/* Mobile Global Search Bar */}
+        <div className="lg:hidden w-full">
+          <GlobalSearch 
+            token={authToken} 
+            user={currentUser} 
+            onSelectFarm={handleSelectFarm} 
+            setActiveTab={setActiveTab} 
+          />
+        </div>
+
         {/* Desktop Top Header Bar with Live Alerts */}
         <div className="hidden lg:flex justify-between items-center bg-white dark:bg-stone-900 border border-[#2D6A4F]/10 dark:border-stone-800 px-6 py-4.5 rounded-3xl shadow-premium transition-colors duration-300">
           <div>
             <span className="text-[10px] font-mono font-bold text-[#2D6A4F]/60 dark:text-[#52B788]/60 uppercase tracking-widest">Active Secure Session</span>
             <h2 className="font-serif font-extrabold text-[#1B4332] dark:text-[#52B788] text-xl mt-0.5 animate-fade-in">Welcome back, {currentUser.name}</h2>
           </div>
+
+          <div id="global-search-container" className="flex-1 max-w-md mx-6">
+            <GlobalSearch 
+              token={authToken} 
+              user={currentUser} 
+              onSelectFarm={handleSelectFarm} 
+              setActiveTab={setActiveTab} 
+            />
+          </div>
+
           <div className="flex items-center gap-5">
             <div className="text-right">
               <p className="text-xs font-extrabold text-gray-700 dark:text-stone-300">{currentUser.email}</p>
@@ -342,6 +394,13 @@ export default function App() {
         token={authToken} 
         onTabChange={setActiveTab} 
         onRefresh={triggerRefreshSignal} 
+      />
+
+      {/* Onboarding Tour Sequence for Investors */}
+      <OnboardingTour 
+        user={currentUser} 
+        isOpen={isTourOpen} 
+        onClose={() => setIsTourOpen(false)} 
       />
     </div>
   );
