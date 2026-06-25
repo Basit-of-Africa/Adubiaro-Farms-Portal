@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Calendar, User, FileText, Send, ChevronRight, Inbox, Sparkles } from 'lucide-react';
+import { Mail, Calendar, User, FileText, Send, ChevronRight, Inbox, Sparkles, CheckCircle2, AlertTriangle, HelpCircle, XCircle } from 'lucide-react';
 import { SimulatedEmail } from '../types';
 
 interface EmailOutboxProps {
@@ -101,10 +101,29 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
                   }`}
                 >
                   <div className="flex justify-between items-center gap-2 mb-1.5">
-                    <span className="text-[9px] font-mono font-bold bg-stone-100 text-stone-600 border px-2 py-0.5 rounded-full uppercase truncate">
-                      {email.category || 'Notification'}
-                    </span>
-                    <span className="text-[9px] text-gray-400 font-mono">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[9px] font-mono font-bold bg-stone-100 text-stone-600 border px-2 py-0.5 rounded-full uppercase truncate">
+                        {email.category || 'Notification'}
+                      </span>
+                      {email.deliveryStatus === 'delivered' && (
+                        <span className="text-[8px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wide flex items-center gap-0.5">
+                          <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                          real
+                        </span>
+                      )}
+                      {email.deliveryStatus === 'failed' && (
+                        <span className="text-[8px] font-bold font-mono px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 uppercase tracking-wide flex items-center gap-0.5">
+                          <span className="h-1 w-1 rounded-full bg-red-500 animate-pulse"></span>
+                          failed
+                        </span>
+                      )}
+                      {(email.deliveryStatus === 'simulated' || !email.deliveryStatus) && (
+                        <span className="text-[8px] font-bold font-mono px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200 uppercase tracking-wide">
+                          sim
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono shrink-0">
                       {new Date(email.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -122,10 +141,31 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
               <div className="flex flex-col h-full bg-white divide-y divide-gray-100">
                 {/* Email headers */}
                 <div className="p-6 space-y-3.5 bg-gray-50/30">
-                  <div className="flex items-center gap-2">
-                    <Send className="h-4.5 w-4.5 text-emerald-600" />
-                    <span className="text-xs font-mono text-gray-400">SMTP Header Envelope</span>
+                  <div className="flex justify-between items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Send className="h-4.5 w-4.5 text-emerald-600" />
+                      <span className="text-xs font-mono text-gray-400">SMTP Header Envelope</span>
+                    </div>
+                    
+                    {/* Delivery Status Badge */}
+                    {selectedEmail.deliveryStatus === 'delivered' ? (
+                      <span className="text-[10px] font-bold font-mono bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        Delivered
+                      </span>
+                    ) : selectedEmail.deliveryStatus === 'failed' ? (
+                      <span className="text-[10px] font-bold font-mono bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        <XCircle className="h-3 w-3 text-red-600" />
+                        Delivery Failed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold font-mono bg-gray-50 text-gray-500 border border-gray-200 px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        <HelpCircle className="h-3 w-3 text-gray-400" />
+                        Simulated Outbox
+                      </span>
+                    )}
                   </div>
+                  
                   <div>
                     <h2 className="text-sm font-bold text-gray-800">{selectedEmail.subject}</h2>
                     <div className="mt-2 text-xs font-mono text-gray-600 space-y-1">
@@ -133,6 +173,44 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
                       <div><b>Timestamp:</b> {new Date(selectedEmail.sentAt).toLocaleString()}</div>
                     </div>
                   </div>
+
+                  {/* Failure detailed banner */}
+                  {selectedEmail.deliveryStatus === 'failed' && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-left space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <h4 className="text-xs font-extrabold text-red-800 uppercase tracking-wider font-sans">Email Dispatch Error Details</h4>
+                          <p className="text-[10.5px] text-red-700 leading-normal font-mono break-all bg-white border border-red-100 p-2.5 rounded-lg">{selectedEmail.deliveryError}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-[10.5px] text-gray-600 leading-relaxed font-sans pt-1 border-t border-red-100 pl-6 space-y-1.5">
+                        <strong className="text-red-800">💡 Dynamic Integration Troubleshooting Guide:</strong>
+                        <ul className="list-disc pl-4 space-y-1 text-[10px]">
+                          <li>
+                            <strong>Cloud Sandboxing SMTP Port Block:</strong> Real-world cloud host providers (like Google Cloud Run) **block outgoing TCP traffic on ports 25, 465, and 587** by default to protect networks from spam. Standard custom SMTP will therefore time out or fail.
+                          </li>
+                          <li>
+                            <strong>Highly Recommended Solution:</strong> Change your configuration in <strong>Settings → Service Settings</strong> to use <strong>Brevo SMTP Third-Party API</strong>. Brevo communicates securely over standard HTTPS (port 443), which is fully allowed and supported in this environment!
+                          </li>
+                          <li>
+                            <strong>Brevo Sender Email verification:</strong> If using Brevo, make sure your <strong>Brevo Sender Email</strong> corresponds to a verified sender or verified domain in your active Brevo dashboard settings.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success banner */}
+                  {selectedEmail.deliveryStatus === 'delivered' && (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-left">
+                      <div className="flex items-center gap-2 text-[10.5px] text-emerald-800 font-medium font-sans">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        <span>Real dispatch completed successfully through your configured active provider channel!</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Simulated email client container */}

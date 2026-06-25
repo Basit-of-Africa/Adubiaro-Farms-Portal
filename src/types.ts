@@ -157,6 +157,8 @@ export interface SimulatedEmail {
   htmlBody: string;
   sentAt: string;
   category: string;
+  deliveryStatus?: 'simulated' | 'delivered' | 'failed';
+  deliveryError?: string;
 }
 
 export interface SystemSettings {

@@ -120,7 +120,7 @@ async function sendSmtpEmail({
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 465 ? true : secure,
+    secure: port === 465,
     auth: {
       user,
       pass
@@ -1360,10 +1360,10 @@ async function dispatchEmail(to: string, subject: string, textBody: string, html
     body: textBody,
     htmlBody,
     sentAt: new Date().toISOString(),
-    category
+    category,
+    deliveryStatus: 'simulated'
   };
   db.simulatedEmails.unshift(newEmail);
-  saveDb();
 
   // 2. Real dispatch based on configuration
   const svc = settings.emailServiceType || 'simulation';
@@ -1383,11 +1383,16 @@ async function dispatchEmail(to: string, subject: string, textBody: string, html
           text: textBody,
           html: htmlBody
         });
+        newEmail.deliveryStatus = 'delivered';
         console.log(`📧 Fully routed REAL SMTP Email to ${to}: ${subject}`);
       } catch (e: any) {
+        newEmail.deliveryStatus = 'failed';
+        newEmail.deliveryError = e.message || String(e);
         console.error('📧 SMTP Send issue (logged in simulated outbox):', e);
       }
     } else {
+      newEmail.deliveryStatus = 'failed';
+      newEmail.deliveryError = 'SMTP service enabled but SMTP Hostname is not configured.';
       console.warn('⚠️ SMTP Email service enabled but no host configured.');
     }
   } else if (svc === 'brevo') {
@@ -1402,16 +1407,25 @@ async function dispatchEmail(to: string, subject: string, textBody: string, html
           text: textBody,
           html: htmlBody
         });
+        newEmail.deliveryStatus = 'delivered';
         console.log(`📧 Fully routed REAL Brevo API Email to ${to}: ${subject}`);
       } catch (e: any) {
+        newEmail.deliveryStatus = 'failed';
+        newEmail.deliveryError = e.message || String(e);
         console.error('📧 Brevo API Send issue (logged in simulated outbox):', e);
       }
     } else {
+      newEmail.deliveryStatus = 'failed';
+      newEmail.deliveryError = 'Brevo service enabled but API Key is not configured.';
       console.warn('⚠️ Brevo Email service enabled but no API Key configured.');
     }
   } else {
+    newEmail.deliveryStatus = 'simulated';
     console.log(`📧 Simulated Email recorded in outbox to ${to}: ${subject}`);
   }
+
+  // Persist the state after the dispatch is complete
+  saveDb();
 }
 
 // AUTHENTICATION MIDDLEWARE
@@ -2347,6 +2361,18 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
     </div>
   `;
 
+  // Initialize test log object early
+  const testSim: SimulatedEmail = {
+    id: 'test-email-' + Date.now().toString(),
+    to: testRecipient,
+    subject,
+    body: textBody,
+    htmlBody,
+    sentAt: new Date().toISOString(),
+    category: 'System Integration Test',
+    deliveryStatus: 'simulated'
+  };
+
   try {
     if (emailServiceType === 'smtp') {
       if (!smtpHost) throw new Error('SMTP Host is required');
@@ -2362,6 +2388,7 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
         text: textBody,
         html: htmlBody
       });
+      testSim.deliveryStatus = 'delivered';
     } else if (emailServiceType === 'brevo') {
       if (!actualBrevoApiKey) throw new Error('Brevo API Key is required');
       await sendBrevoEmail({
@@ -2373,20 +2400,13 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
         text: textBody,
         html: htmlBody
       });
+      testSim.deliveryStatus = 'delivered';
     } else {
       console.log(`📧 Test Email simulation to ${testRecipient}`);
+      testSim.deliveryStatus = 'simulated';
     }
 
-    // Also record it in outbox for review
-    const testSim: SimulatedEmail = {
-      id: 'test-email-' + Date.now().toString(),
-      to: testRecipient,
-      subject,
-      body: textBody,
-      htmlBody,
-      sentAt: new Date().toISOString(),
-      category: 'System Integration Test'
-    };
+    // Record and save successful test in the outbox
     db.simulatedEmails.unshift(testSim);
     saveDb();
 
@@ -2401,6 +2421,13 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
     ) {
       errorMsg = `SMTP Connection Timeout/Failed: "${errorMsg}". Note: Cloud containers (e.g. Cloud Run) block standard outbound SMTP ports (25, 465, 587) by default to prevent spam. We highly recommend switching your 'Integration Channel Method' to 'Brevo SMTP Third-Party API' which communicates securely over standard HTTPS (port 443) and is fully supported in this cloud sandbox environment!`;
     }
+
+    // Record the failure in simulated outbox logs so that administrators can review details
+    testSim.deliveryStatus = 'failed';
+    testSim.deliveryError = errorMsg;
+    db.simulatedEmails.unshift(testSim);
+    saveDb();
+
     res.status(500).json({ error: errorMsg });
   }
 });
