@@ -27,7 +27,13 @@ import {
   Clock,
   HardDrive,
   Eye,
-  EyeOff
+  EyeOff,
+  ArrowLeft,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Landmark,
+  Award
 } from 'lucide-react';
 import { User, Farm, FarmPlot, UserRole, DocumentCategory, DocumentVisibility, FinancialStatus } from '../types';
 import DashboardStats from './DashboardStats';
@@ -45,6 +51,7 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subView, setSubView] = useState<'default' | 'investors' | 'managers'>('default');
 
   // Lists
   const [farms, setFarms] = useState<Farm[]>([]);
@@ -182,6 +189,63 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
       setError(err.message || 'Stats retrieval error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleUserActive = async (targetUser: User) => {
+    if (targetUser.id === user.id) {
+      alert('You cannot deactivate your own super admin account.');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${targetUser.id}/toggle-active`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to toggle account activation status');
+      }
+
+      await res.json();
+      fetchStatsAndLists();
+      if (triggerRefreshSignal) triggerRefreshSignal();
+    } catch (err: any) {
+      alert(err.message || 'Error updating account status.');
+    }
+  };
+
+  const handleDeleteUser = async (targetUser: User) => {
+    if (targetUser.id === user.id) {
+      alert('You cannot delete your own super admin account.');
+      return;
+    }
+
+    if (!window.confirm(`Are you absolutely sure you want to permanently delete user "${targetUser.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${targetUser.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to delete account');
+      }
+
+      fetchStatsAndLists();
+      if (triggerRefreshSignal) triggerRefreshSignal();
+    } catch (err: any) {
+      alert(err.message || 'Error deleting user.');
     }
   };
 
@@ -646,6 +710,363 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
     );
   }
 
+  if (subView === 'investors') {
+    const investorsList = systemUsers.filter(usr => usr.role === UserRole.INVESTOR);
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        {/* Breadcrumb Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium">
+          <div>
+            <button 
+              onClick={() => setSubView('default')}
+              className="flex items-center gap-1 text-xs font-mono font-bold text-[#2D6A4F] hover:text-[#1B4332] transition cursor-pointer mb-2"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Admin Dashboard</span>
+            </button>
+            <h1 className="font-serif font-extrabold text-2xl text-[#1B4332] tracking-wide">Investor Directory</h1>
+            <p className="text-xs text-gray-400 font-mono mt-1 font-bold">
+              {investorsList.length} registered investors & their active holding portfolios
+            </p>
+          </div>
+          <div>
+            <button 
+              onClick={() => {
+                setActiveFormTab('user');
+                setNewRole('investor');
+                setSubView('default');
+                setTimeout(() => {
+                  const el = document.getElementById('admin-actions-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl text-xs font-mono font-bold cursor-pointer shadow-sm transition"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>Add New Investor</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Investors Cards List */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {investorsList.map((usr) => {
+            // Find owned plots
+            const holdings = stats?.investorPlots?.filter((ip: any) => ip.investorId === usr.id && ip.isActive) || [];
+            const totalInvestedAmount = holdings.reduce((sum: number, ip: any) => sum + ip.investmentAmount, 0);
+
+            return (
+              <div 
+                key={usr.id} 
+                className={`bg-white rounded-3xl border ${usr.isActive !== false ? 'border-[#2D6A4F]/10' : 'border-red-200/45 bg-red-50/10'} p-6 shadow-premium transition duration-300 hover:shadow-lg`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 bg-[#52B788]/10 rounded-full flex items-center justify-center font-bold text-[#1B4332] text-sm shrink-0 border border-[#52B788]/20">
+                      {usr.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <h3 className="font-serif font-bold text-base text-[#1B4332] flex items-center gap-2">
+                        {usr.name}
+                        {usr.isActive === false && (
+                          <span className="text-[9px] font-mono font-extrabold bg-red-100 text-red-800 px-2 py-0.5 rounded-full border border-red-200 uppercase">
+                            Inactive
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[11px] text-gray-400 font-mono">@{usr.username} • {usr.id}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Administrative Controls */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <button
+                      onClick={() => handleToggleUserActive(usr)}
+                      disabled={usr.id === user.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold font-mono rounded-lg border cursor-pointer transition ${
+                        usr.isActive !== false
+                          ? 'text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                          : 'text-gray-500 bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      } ${usr.id === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title={usr.isActive !== false ? 'Deactivate investor' : 'Activate investor'}
+                    >
+                      {usr.isActive !== false ? (
+                        <>
+                          <ToggleRight className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>ACTIVE</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="text-gray-400">INACTIVE</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteUser(usr)}
+                      disabled={usr.id === user.id}
+                      className={`p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer ${
+                        usr.id === user.id ? 'opacity-30 cursor-not-allowed' : ''
+                      }`}
+                      title="Permanently delete user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4 border-b border-gray-100 text-xs">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-gray-400 font-bold block">Email Address</span>
+                    <span className="font-medium text-gray-700 block mt-0.5">{usr.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-gray-400 font-bold block">Phone Number</span>
+                    <span className="font-medium text-gray-700 block mt-0.5">{usr.phone || 'N/A'}</span>
+                  </div>
+                </div>
+
+                {/* Portfolio Holdings */}
+                <div className="pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono uppercase text-[#2D6A4F]/80 font-bold tracking-wider flex items-center gap-1">
+                      <Landmark className="h-3.5 w-3.5 text-amber-500" />
+                      <span>Allocated Holdings ({holdings.length})</span>
+                    </span>
+                    <span className="text-xs font-mono font-bold text-[#1B4332]">
+                      Total Invested: ₦{totalInvestedAmount.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {holdings.length === 0 ? (
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 text-center">
+                      <p className="text-[11px] text-gray-400 italic">No plots active or allocated to this investor.</p>
+                      <button
+                        onClick={() => {
+                          setActiveFormTab('plot');
+                          setAllocInvestorId(usr.id);
+                          setSubView('default');
+                          setTimeout(() => {
+                            const el = document.getElementById('admin-actions-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }, 100);
+                        }}
+                        className="text-[10px] font-mono font-extrabold text-emerald-600 hover:text-[#1B4332] mt-1 hover:underline cursor-pointer"
+                      >
+                        + Allocate Plot Record
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {holdings.map((h: any) => {
+                        const plotDetail = stats?.plots?.find((p: any) => p.id === h.plotId);
+                        const farmName = farms.find(f => f.id === plotDetail?.farmId)?.name || 'Adubiaro Estate';
+
+                        return (
+                          <div 
+                            key={h.id} 
+                            className="bg-gray-50/50 hover:bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center justify-between text-xs transition"
+                          >
+                            <div>
+                              <div className="font-bold text-gray-800">Plot {plotDetail?.plotNumber || 'Unspecified'}</div>
+                              <div className="text-[10px] text-gray-400 truncate max-w-[200px]">{farmName}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-mono font-bold text-[#1B4332]">₦{h.investmentAmount?.toLocaleString()}</div>
+                              <div className="text-[9px] font-mono text-gray-400">{h.ownershipPercentage}% Ownership • Ref: {h.contractRef}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (subView === 'managers') {
+    const managersList = systemUsers.filter(usr => usr.role === UserRole.FARM_MANAGER);
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        {/* Breadcrumb Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium">
+          <div>
+            <button 
+              onClick={() => setSubView('default')}
+              className="flex items-center gap-1 text-xs font-mono font-bold text-[#2D6A4F] hover:text-[#1B4332] transition cursor-pointer mb-2"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Admin Dashboard</span>
+            </button>
+            <h1 className="font-serif font-extrabold text-2xl text-[#1B4332] tracking-wide">Farm Managers Directory</h1>
+            <p className="text-xs text-gray-400 font-mono mt-1 font-bold">
+              {managersList.length} field supervisors & their active estate supervisor assignments
+            </p>
+          </div>
+          <div>
+            <button 
+              onClick={() => {
+                setActiveFormTab('user');
+                setNewRole('farm_manager');
+                setSubView('default');
+                setTimeout(() => {
+                  const el = document.getElementById('admin-actions-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1B4332] hover:bg-[#2D6A4F] text-white rounded-xl text-xs font-mono font-bold cursor-pointer shadow-sm transition"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>Add New Manager</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Managers Cards List */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {managersList.map((usr) => {
+            // Find manager assignments
+            const managerAssignments = stats?.assignments?.filter((a: any) => a.managerId === usr.id && a.isActive) || [];
+
+            return (
+              <div 
+                key={usr.id} 
+                className={`bg-white rounded-3xl border ${usr.isActive !== false ? 'border-[#2D6A4F]/10' : 'border-red-200/45 bg-red-50/10'} p-6 shadow-premium transition duration-300 hover:shadow-lg`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-gray-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-12 w-12 bg-[#52B788]/10 rounded-full flex items-center justify-center font-bold text-[#1B4332] text-sm shrink-0 border border-[#52B788]/20">
+                      {usr.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+                    </div>
+                    <div>
+                      <h3 className="font-serif font-bold text-base text-[#1B4332] flex items-center gap-2">
+                        {usr.name}
+                        {usr.isActive === false && (
+                          <span className="text-[9px] font-mono font-extrabold bg-red-100 text-red-800 px-2 py-0.5 rounded-full border border-red-200 uppercase">
+                            Inactive
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[11px] text-gray-400 font-mono">@{usr.username} • {usr.id}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Administrative Controls */}
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    <button
+                      onClick={() => handleToggleUserActive(usr)}
+                      disabled={usr.id === user.id}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold font-mono rounded-lg border cursor-pointer transition ${
+                        usr.isActive !== false
+                          ? 'text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                          : 'text-gray-500 bg-gray-50 border-gray-200 hover:bg-gray-100'
+                      } ${usr.id === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title={usr.isActive !== false ? 'Deactivate manager' : 'Activate manager'}
+                    >
+                      {usr.isActive !== false ? (
+                        <>
+                          <ToggleRight className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>ACTIVE</span>
+                        </>
+                      ) : (
+                        <>
+                          <ToggleLeft className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                          <span className="text-gray-400">INACTIVE</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleDeleteUser(usr)}
+                      disabled={usr.id === user.id}
+                      className={`p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer ${
+                        usr.id === user.id ? 'opacity-30 cursor-not-allowed' : ''
+                      }`}
+                      title="Permanently delete user"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-4 border-b border-gray-100 text-xs">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-gray-400 font-bold block">Email Address</span>
+                    <span className="font-medium text-gray-700 block mt-0.5">{usr.email}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-gray-400 font-bold block">Phone Number</span>
+                    <span className="font-medium text-gray-700 block mt-0.5">{usr.phone || 'N/A'}</span>
+                  </div>
+                </div>
+
+                {/* Supervisor Assignments */}
+                <div className="pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-mono uppercase text-[#2D6A4F]/80 font-bold tracking-wider flex items-center gap-1">
+                      <Award className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Supervising Estates ({managerAssignments.length})</span>
+                    </span>
+                  </div>
+
+                  {managerAssignments.length === 0 ? (
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 text-center">
+                      <p className="text-[11px] text-gray-400 italic">No farm estates currently assigned to this manager.</p>
+                      <button
+                        onClick={() => {
+                          setActiveFormTab('assign');
+                          setAssignManagerId(usr.id);
+                          setSubView('default');
+                          setTimeout(() => {
+                            const el = document.getElementById('admin-actions-section');
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }, 100);
+                        }}
+                        className="text-[10px] font-mono font-extrabold text-emerald-600 hover:text-[#1B4332] mt-1 hover:underline cursor-pointer"
+                      >
+                        + Assign Farm Estate
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {managerAssignments.map((a: any) => {
+                        const farmDetail = farms.find(f => f.id === a.farmId);
+
+                        return (
+                          <div 
+                            key={a.id} 
+                            className="bg-gray-50/50 hover:bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center justify-between text-xs transition"
+                          >
+                            <div>
+                              <div className="font-bold text-gray-800">{farmDetail?.name || 'Adubiaro Estate'}</div>
+                              <div className="text-[10px] text-gray-400">{farmDetail?.location || 'Unknown Location'}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-mono text-[10px] text-gray-500">Assigned: {new Date(a.assignedDate).toLocaleDateString()}</div>
+                              <div className="text-[9px] font-mono text-emerald-600 font-bold">Active Supervisor</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="admin-dashboard-container" className="space-y-8 animate-fade-in">
       {/* Upper header */}
@@ -689,23 +1110,41 @@ export default function AdminDashboard({ user, token, onSelectFarm, triggerRefre
 
       {/* Stats KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium flex items-center gap-4.5">
-          <div className="p-3 bg-[#52B788]/10 rounded-2xl text-[#1B4332]">
-            <Users className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[9px] font-mono uppercase text-gray-400 font-bold tracking-wider">Total Investors</div>
-            <div className="text-2xl font-bold text-[#1B4332] font-serif mt-0.5">{stats?.totalInvestors}</div>
+        <div 
+          onClick={() => setSubView('investors')}
+          className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium flex items-center justify-between gap-4.5 cursor-pointer hover:border-[#2D6A4F]/35 hover:shadow-lg hover:shadow-[#2D6A4F]/5 transition-all duration-300 transform hover:-translate-y-0.5 group active:scale-95"
+          title="Click to view full Investor Directory"
+        >
+          <div className="flex items-center gap-4.5">
+            <div className="p-3 bg-[#52B788]/10 rounded-2xl text-[#1B4332] group-hover:bg-[#52B788]/20 transition-all duration-300">
+              <Users className="h-6 w-6 text-[#2D6A4F] group-hover:scale-105 transition duration-300" />
+            </div>
+            <div>
+              <div className="text-[9px] font-mono uppercase text-gray-400 font-bold tracking-wider group-hover:text-[#2D6A4F] transition duration-300">Total Investors</div>
+              <div className="text-2xl font-bold text-[#1B4332] font-serif mt-0.5 flex items-center gap-1.5">
+                <span>{stats?.totalInvestors}</span>
+                <span className="text-xs font-mono font-bold text-emerald-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition duration-300">→ VIEW</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium flex items-center gap-4.5">
-          <div className="p-3 bg-[#52B788]/10 rounded-2xl text-[#1B4332]">
-            <Briefcase className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="text-[9px] font-mono uppercase text-gray-400 font-bold tracking-wider">Farm Managers</div>
-            <div className="text-2xl font-bold text-[#1B4332] font-serif mt-0.5">{stats?.totalManagers}</div>
+        <div 
+          onClick={() => setSubView('managers')}
+          className="bg-white p-6 rounded-2xl border border-[#2D6A4F]/10 shadow-premium flex items-center justify-between gap-4.5 cursor-pointer hover:border-[#2D6A4F]/35 hover:shadow-lg hover:shadow-[#2D6A4F]/5 transition-all duration-300 transform hover:-translate-y-0.5 group active:scale-95"
+          title="Click to view full Farm Managers Directory"
+        >
+          <div className="flex items-center gap-4.5">
+            <div className="p-3 bg-[#52B788]/10 rounded-2xl text-[#1B4332] group-hover:bg-[#52B788]/20 transition-all duration-300">
+              <Briefcase className="h-6 w-6 text-[#2D6A4F] group-hover:scale-105 transition duration-300" />
+            </div>
+            <div>
+              <div className="text-[9px] font-mono uppercase text-gray-400 font-bold tracking-wider group-hover:text-[#2D6A4F] transition duration-300">Farm Managers</div>
+              <div className="text-2xl font-bold text-[#1B4332] font-serif mt-0.5 flex items-center gap-1.5">
+                <span>{stats?.totalManagers}</span>
+                <span className="text-xs font-mono font-bold text-emerald-600 opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition duration-300">→ VIEW</span>
+              </div>
+            </div>
           </div>
         </div>
 

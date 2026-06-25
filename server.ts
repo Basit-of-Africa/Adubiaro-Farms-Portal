@@ -1459,7 +1459,10 @@ app.get('/api/admin/system-stats', requireAuth, (req, res) => {
     totalActiveInvestmentAmount,
     totalPaidPayouts,
     totalPendingPayouts,
-    totalPayoutsThisMonth
+    totalPayoutsThisMonth,
+    plots: db.plots,
+    investorPlots: db.investorPlots,
+    assignments: db.assignments
   });
 });
 
