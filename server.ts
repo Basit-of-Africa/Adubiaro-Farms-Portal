@@ -206,244 +206,18 @@ function getInitialDb(): DatabaseSchema {
         role: UserRole.ADMIN,
         phone: '+2348030012211',
         email: 'admin@adubiaro.com',
-        name: 'Basit Ajibade'
-      },
-      {
-        id: 'user-manager1',
-        username: 'manager1',
-        role: UserRole.FARM_MANAGER,
-        phone: '+2348052219088',
-        email: 'wale@adubiaro.com',
-        name: 'Wale Adeleke'
-      },
-      {
-        id: 'user-investor1',
-        username: 'investor1',
-        role: UserRole.INVESTOR,
-        phone: '+2347012345678',
-        email: 'investor1@example.com',
-        name: 'Olumide Benson'
-      },
-      {
-        id: 'user-investor2',
-        username: 'investor2',
-        role: UserRole.INVESTOR,
-        phone: '+2348123456789',
-        email: 'investor2@example.com',
-        name: 'Fatima Yar-Adua'
-      }
-    ],
-    farms: [
-      {
-        id: 'farm-01',
-        name: 'Adubiaro Oil Palm Estate',
-        location: 'Ikere-Ekiti',
-        state: 'Ekiti State',
-        totalPlots: 3,
-        totalHectares: 5.3,
-        description: 'Premier oil palm estate in Southwest Nigeria. Featuring advanced high-yield tenera hybrid palm trees supported by solar-powered drip irrigation, premium nursery supervision, and state of the art processing milling.',
-        coverImage: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=800',
-        dateEstablished: '2024-03-15',
+        name: 'Basit Ajibade',
         isActive: true
       }
     ],
-    plots: [
-      {
-        id: 'plot-01',
-        farmId: 'farm-01',
-        plotNumber: 'A-01',
-        sizeHectares: 1.5,
-        cropType: 'Oil Palm (Tenera Hybrid)',
-        status: PlotStatus.ACTIVE
-      },
-      {
-        id: 'plot-02',
-        farmId: 'farm-01',
-        plotNumber: 'A-02',
-        sizeHectares: 2.0,
-        cropType: 'Oil Palm (Tenera Hybrid)',
-        status: PlotStatus.HARVESTING
-      },
-      {
-        id: 'plot-03',
-        farmId: 'farm-01',
-        plotNumber: 'B-01',
-        sizeHectares: 1.8,
-        cropType: 'Oil Palm (Tenera Hybrid)',
-        status: PlotStatus.DORMANT
-      }
-    ],
-    investorPlots: [
-      {
-        id: 'invplot-01',
-        investorId: 'user-investor1',
-        plotId: 'plot-01',
-        investmentAmount: 25000,
-        ownershipPercentage: 100,
-        startDate: '2025-06-01',
-        contractRef: 'CON-2025-01',
-        isActive: true
-      },
-      {
-        id: 'invplot-02',
-        investorId: 'user-investor1',
-        plotId: 'plot-02',
-        investmentAmount: 35000,
-        ownershipPercentage: 100,
-        startDate: '2025-08-12',
-        contractRef: 'CON-2025-02',
-        isActive: true
-      },
-      {
-        id: 'invplot-03',
-        investorId: 'user-investor2',
-        plotId: 'plot-03',
-        investmentAmount: 28000,
-        ownershipPercentage: 100,
-        startDate: '2026-01-05',
-        contractRef: 'CON-2026-01',
-        isActive: true
-      }
-    ],
-    assignments: [
-      {
-        id: 'assign-01',
-        managerId: 'user-manager1',
-        farmId: 'farm-01',
-        assignedDate: '2024-04-01',
-        isActive: true
-      }
-    ],
-    updates: [
-      {
-        id: 'update-01',
-        farmId: 'farm-01',
-        postedBy: 'user-manager1',
-        postedByName: 'Wale Adeleke',
-        title: 'Growth Report — Q1 Progress',
-        body: 'We are pleased to report excellent growth across all palm cohorts. Soil testing confirms optimal nutrient retention, and our organic fertilization regimen is on schedule. Rain levels have been supportive.',
-        updateType: UpdateType.GROWTH,
-        isPublished: true,
-        createdAt: '2026-06-01T10:00:00Z',
-        photos: [
-          {
-            id: 'uphoto-1',
-            updateId: 'update-01',
-            image: 'https://images.unsplash.com/photo-1516253593875-bd7ba052fbc5?auto=format&fit=crop&q=80&w=600',
-            caption: 'Nursery seedlings transplanting'
-          }
-        ]
-      },
-      {
-        id: 'update-02',
-        farmId: 'farm-01',
-        postedBy: 'user-manager1',
-        postedByName: 'Wale Adeleke',
-        title: 'Harvest Notice — Section A',
-        body: 'Harvesting activities have commenced for Block A. Our field workers are harvesting fresh fruit bunches (FFB) yielding an average of 4.2 tons per hectare. Crushing operations have also kicked off at the processing center.',
-        updateType: UpdateType.HARVEST,
-        isPublished: true,
-        createdAt: '2026-06-10T14:30:00Z',
-        photos: [
-          {
-            id: 'uphoto-2',
-            updateId: 'update-02',
-            image: 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?auto=format&fit=crop&q=80&w=600',
-            caption: 'FFB loading'
-          }
-        ]
-      },
-      {
-        id: 'update-03',
-        farmId: 'farm-01',
-        postedBy: 'user-admin',
-        postedByName: 'Basit Ajibade',
-        title: 'Infrastructure Milestone — Irrigation Upgrade',
-        body: 'A major milestone has been completed. The solar-powered drip irrigation system is now fully operational across Block B. This will safeguard crop yield integrity during dry spells and dry seasons.',
-        updateType: UpdateType.MILESTONE,
-        isPublished: true,
-        createdAt: '2026-06-14T09:15:00Z',
-        photos: []
-      }
-    ],
-    documents: [
-      {
-        id: 'doc-01',
-        farmId: 'farm-01',
-        uploadedBy: 'user-admin',
-        uploadedByName: 'Basit Ajibade',
-        title: 'Environmental Impact Assessment Certificate',
-        fileUrl: '#eia-certificate',
-        fileName: 'EIA_Certificate_Adubiaro_2024.pdf',
-        category: DocumentCategory.CERTIFICATE,
-        visibility: DocumentVisibility.FARM,
-        description: 'Federal Ministry of Environment clearance certificate demonstrating sustainable ecological practices for Adubiaro Estates.',
-        uploadedAt: '2024-05-10T11:00:00Z'
-      },
-      {
-        id: 'doc-02',
-        farmId: 'farm-01',
-        plotId: 'plot-01',
-        uploadedBy: 'user-admin',
-        uploadedByName: 'Basit Ajibade',
-        title: 'Deed of Farming Contract — Plot A-01',
-        fileUrl: '#deed-a-01',
-        fileName: 'Contract_A-01_Benson.pdf',
-        category: DocumentCategory.CONTRACT,
-        visibility: DocumentVisibility.PLOT,
-        description: 'Official verified purchase deed and investment contract for Block A-01 owned by Olumide Benson.',
-        uploadedAt: '2025-06-02T16:00:00Z'
-      }
-    ],
-    financials: [
-      {
-        id: 'fin-01',
-        plotId: 'plot-01',
-        uploadedBy: 'user-admin',
-        period: 'Q1',
-        year: 2026,
-        roiPercentage: 12.5,
-        payoutAmount: 3125,
-        payoutDate: '2026-04-15',
-        status: FinancialStatus.PAID,
-        notes: 'First quarter yield payout successfully transferred.'
-      },
-      {
-        id: 'fin-02',
-        plotId: 'plot-02',
-        uploadedBy: 'user-admin',
-        period: 'Q2',
-        year: 2026,
-        roiPercentage: 8.2,
-        payoutAmount: 2870,
-        payoutDate: '2026-07-15',
-        status: FinancialStatus.PENDING,
-        notes: 'Second quarter yield forecast under active auditing.'
-      },
-      {
-        id: 'fin-03',
-        plotId: 'plot-03',
-        uploadedBy: 'user-admin',
-        period: 'Q2',
-        year: 2026,
-        roiPercentage: 0.0,
-        payoutAmount: 0,
-        payoutDate: '2026-07-15',
-        status: FinancialStatus.PENDING,
-        notes: 'Plot under dormant soil rejuvenation cycle. No payout due.'
-      }
-    ],
-    simulatedEmails: [
-      {
-        id: 'email-01',
-        to: 'investor1@example.com',
-        subject: 'Welcome to Adubiaro Farm Estates Portal',
-        body: 'Welcome Olumide Benson! Your account is set up with username investor1. Use temporary password Investor@1234.',
-        htmlBody: `<h3>Welcome to Adubiaro Farm Estates Portal</h3><p>Dear Olumide Benson,</p><p>We are delighted to welcome you to the Adubiaro Farm Estate family!</p><p>Your private investor dashboard is now ready. Use the credentials below to log in and track your high-performance oil palm investments:</p><ul><li><b>Username:</b> investor1</li><li><b>Temporary Password:</b> Investor@1234</li><li><b>Portal URL:</b> <a href="#">Login Here</a></li></ul><p>Our dedicated support desk is available at support@adubiaro.com if you require assistance.</p><p>Warm regards,<br/>Adubiaro Executive Team</p>`,
-        sentAt: '2025-06-01T08:00:00Z',
-        category: 'Welcome'
-      }
-    ],
+    farms: [],
+    plots: [],
+    investorPlots: [],
+    assignments: [],
+    updates: [],
+    documents: [],
+    financials: [],
+    simulatedEmails: [],
     settings: {
       databaseMode: 'auto',
       simulatedLatency: 0,
@@ -840,7 +614,9 @@ function mapUserFromDb(row: any): User {
     role: row.role as UserRole,
     phone: row.phone || undefined,
     email: row.email,
-    name: row.name
+    name: row.name,
+    password: row.password || undefined,
+    isActive: row.is_active !== false
   };
 }
 
@@ -1015,15 +791,17 @@ async function saveDbToPostgres() {
     // 1. Synchronize Users
     for (const user of db.users) {
       await client.query(
-        `INSERT INTO users (id, username, role, phone, email, name)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (id, username, role, phone, email, name, password, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO UPDATE SET
            username = EXCLUDED.username,
            role = EXCLUDED.role,
            phone = EXCLUDED.phone,
            email = EXCLUDED.email,
-           name = EXCLUDED.name`,
-        [user.id, user.username, user.role, user.phone || null, user.email, user.name]
+           name = EXCLUDED.name,
+           password = EXCLUDED.password,
+           is_active = EXCLUDED.is_active`,
+        [user.id, user.username, user.role, user.phone || null, user.email, user.name, user.password || null, user.isActive !== false]
       );
     }
 
@@ -1291,7 +1069,9 @@ async function initPostgres() {
         role VARCHAR(50) NOT NULL,
         phone VARCHAR(50),
         email VARCHAR(100) NOT NULL,
-        name VARCHAR(100) NOT NULL
+        name VARCHAR(100) NOT NULL,
+        password VARCHAR(100),
+        is_active BOOLEAN DEFAULT TRUE
       );
 
       CREATE TABLE IF NOT EXISTS farms (
@@ -1386,6 +1166,12 @@ async function initPostgres() {
         sent_at VARCHAR(100) NOT NULL,
         category VARCHAR(100) NOT NULL
       );
+    `);
+
+    // Ensure legacy schemas have the password and is_active columns
+    await pgPool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(100);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
     `);
 
     // Run empty-check for seeding
@@ -1573,6 +1359,9 @@ function requireAuth(req: express.Request, res: express.Response, next: express.
   if (!user) {
     return res.status(401).json({ error: 'Unauthenticated' });
   }
+  if (user.isActive === false) {
+    return res.status(403).json({ error: 'This account has been deactivated. Please contact support.' });
+  }
   // Attach user to req as custom property
   (req as any).user = user;
   next();
@@ -1588,6 +1377,10 @@ app.post('/api/auth/login', (req, res) => {
   const user = db.users.find(u => u.username === username);
   if (!user) {
     return res.status(400).json({ error: 'Invalid login credentials' });
+  }
+
+  if (user.isActive === false) {
+    return res.status(403).json({ error: 'This account has been deactivated. Please contact support.' });
   }
 
   let isMatch = false;
@@ -2301,6 +2094,54 @@ app.get('/api/admin/users', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Admin access required' });
   }
   res.json(db.users);
+});
+
+// Admin Route to toggle active status of a user
+app.post('/api/admin/users/:id/toggle-active', requireAuth, (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (currentUser.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const targetUserId = req.params.id;
+  if (targetUserId === currentUser.id) {
+    return res.status(400).json({ error: 'You cannot deactivate your own super admin account.' });
+  }
+
+  const targetUser = db.users.find(u => u.id === targetUserId);
+  if (!targetUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  // Toggle active
+  targetUser.isActive = targetUser.isActive === false ? true : false;
+  saveDb();
+
+  res.json({ success: true, user: targetUser });
+});
+
+// Admin Route to delete a user
+app.delete('/api/admin/users/:id', requireAuth, (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (currentUser.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  const targetUserId = req.params.id;
+  if (targetUserId === currentUser.id) {
+    return res.status(400).json({ error: 'You cannot delete your own super admin account.' });
+  }
+
+  const userIndex = db.users.findIndex(u => u.id === targetUserId);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const deletedUser = db.users[userIndex];
+  db.users.splice(userIndex, 1);
+  saveDb();
+
+  res.json({ success: true, deletedUser });
 });
 
 // Admin route to manage plots, link to farms, assign plots to investors
@@ -3108,6 +2949,54 @@ app.get('/api/portal/settings', (req, res) => {
 async function startServer() {
   await initFirestore();
   await initPostgres();
+
+  // Automatically clear out any pre-seeded demo data on startup to enforce clean state
+  console.log('🧹 Checking and removing any pre-seeded demo data on startup...');
+  let dataRemoved = false;
+
+  if (db.users && db.users.some(u => ['user-manager1', 'user-investor1', 'user-investor2'].includes(u.id))) {
+    db.users = db.users.filter(u => !['user-manager1', 'user-investor1', 'user-investor2'].includes(u.id));
+    dataRemoved = true;
+  }
+  if (db.farms && db.farms.some(f => f.id === 'farm-01')) {
+    db.farms = db.farms.filter(f => f.id !== 'farm-01');
+    dataRemoved = true;
+  }
+  if (db.plots && db.plots.some(p => ['plot-01', 'plot-02', 'plot-03'].includes(p.id))) {
+    db.plots = db.plots.filter(p => !['plot-01', 'plot-02', 'plot-03'].includes(p.id));
+    dataRemoved = true;
+  }
+  if (db.investorPlots && db.investorPlots.some(ip => ['invplot-01', 'invplot-02', 'invplot-03'].includes(ip.id))) {
+    db.investorPlots = db.investorPlots.filter(ip => !['invplot-01', 'invplot-02', 'invplot-03'].includes(ip.id));
+    dataRemoved = true;
+  }
+  if (db.assignments && db.assignments.some(a => a.id === 'assign-01')) {
+    db.assignments = db.assignments.filter(a => a.id !== 'assign-01');
+    dataRemoved = true;
+  }
+  if (db.updates && db.updates.some(up => ['update-01', 'update-02', 'update-03'].includes(up.id))) {
+    db.updates = db.updates.filter(up => !['update-01', 'update-02', 'update-03'].includes(up.id));
+    dataRemoved = true;
+  }
+  if (db.documents && db.documents.some(d => ['doc-01', 'doc-02'].includes(d.id))) {
+    db.documents = db.documents.filter(d => !['doc-01', 'doc-02'].includes(d.id));
+    dataRemoved = true;
+  }
+  if (db.financials && db.financials.some(fin => ['fin-01', 'fin-02', 'fin-03'].includes(fin.id))) {
+    db.financials = db.financials.filter(fin => !['fin-01', 'fin-02', 'fin-03'].includes(fin.id));
+    dataRemoved = true;
+  }
+  if (db.simulatedEmails && db.simulatedEmails.some(em => em.id === 'email-01')) {
+    db.simulatedEmails = db.simulatedEmails.filter(em => em.id !== 'email-01');
+    dataRemoved = true;
+  }
+
+  if (dataRemoved) {
+    console.log('🧹 Demo data records detected. Purging from database and saving clean slate...');
+    saveDb();
+  } else {
+    console.log('✨ No pre-seeded demo data records found on startup.');
+  }
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

@@ -482,6 +482,77 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
     }
   };
 
+  // Toggle User Active Status
+  const handleToggleUserActive = async (targetUser: User) => {
+    if (targetUser.id === user.id) {
+      setUsersError('You cannot deactivate your own super admin account.');
+      return;
+    }
+
+    try {
+      setUsersError(null);
+      setNewUserSuccess(null);
+
+      const res = await fetch(`/api/admin/users/${targetUser.id}/toggle-active`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to toggle account activation status');
+      }
+
+      await res.json();
+      setNewUserSuccess(`Account activation status for "${targetUser.name}" updated successfully.`);
+      
+      // Refresh list
+      fetchUsersList();
+      if (triggerRefreshSignal) triggerRefreshSignal();
+    } catch (err: any) {
+      setUsersError(err.message || 'Error updating account status.');
+    }
+  };
+
+  // Delete User
+  const handleDeleteUser = async (targetUser: User) => {
+    if (targetUser.id === user.id) {
+      setUsersError('You cannot delete your own super admin account.');
+      return;
+    }
+
+    if (!window.confirm(`Are you absolutely sure you want to permanently delete user "${targetUser.name}"? This action cannot be undone and will revoke all access immediately.`)) {
+      return;
+    }
+
+    try {
+      setUsersError(null);
+      setNewUserSuccess(null);
+
+      const res = await fetch(`/api/admin/users/${targetUser.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to delete account');
+      }
+
+      setNewUserSuccess(`Account "${targetUser.name}" has been permanently deleted.`);
+      
+      // Refresh list
+      fetchUsersList();
+      if (triggerRefreshSignal) triggerRefreshSignal();
+    } catch (err: any) {
+      setUsersError(err.message || 'Error deleting user.');
+    }
+  };
+
   // Clear Alert Messages
   useEffect(() => {
     if (saveSysSuccess) {
@@ -1341,6 +1412,7 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                           <th className="px-5 py-3">System username</th>
                           <th className="px-5 py-3">Privileges group</th>
                           <th className="px-5 py-3">Contact details</th>
+                          <th className="px-5 py-3 text-right">Administrative controls</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 font-sans">
@@ -1374,6 +1446,45 @@ export default function SettingsView({ user, token, triggerRefreshSignal, refres
                             <td className="px-5 py-4 font-medium text-gray-600">
                               <span className="block text-xs">{usr.email}</span>
                               {usr.phone && <span className="block text-[10px] text-gray-400 font-mono mt-0.5">{usr.phone}</span>}
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {/* Toggle active button */}
+                                <button
+                                  onClick={() => handleToggleUserActive(usr)}
+                                  disabled={usr.id === user.id}
+                                  className={`inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold font-mono rounded-lg border cursor-pointer transition ${
+                                    usr.isActive !== false
+                                      ? 'text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70'
+                                      : 'text-gray-500 bg-gray-50 border-gray-200 hover:bg-gray-100/70'
+                                  } ${usr.id === user.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  title={usr.isActive !== false ? 'Deactivate user' : 'Activate user'}
+                                >
+                                  {usr.isActive !== false ? (
+                                    <>
+                                      <ToggleRight className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                      <span>ACTIVE</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ToggleLeft className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                      <span className="text-gray-400">INACTIVE</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                {/* Delete button */}
+                                <button
+                                  onClick={() => handleDeleteUser(usr)}
+                                  disabled={usr.id === user.id}
+                                  className={`p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer ${
+                                    usr.id === user.id ? 'opacity-30 cursor-not-allowed' : ''
+                                  }`}
+                                  title={usr.id === user.id ? 'Cannot delete your own admin account' : 'Permanently delete user'}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}

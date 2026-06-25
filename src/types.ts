@@ -57,6 +57,7 @@ export interface User {
   email: string;
   name: string;
   password?: string;
+  isActive?: boolean;
 }
 
 export interface Farm {

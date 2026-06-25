@@ -184,7 +184,7 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
           }`}
         >
           <Clock className="h-4 w-4" />
-          <span>Operational Chronicles ({updates.length})</span>
+          <span>Activity Log ({updates.length})</span>
         </button>
 
         <button
