@@ -697,6 +697,7 @@ function mapUpdateFromDb(row: any): FarmUpdate {
     targetInvestorIds,
     isPublished: Boolean(row.is_published),
     createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at,
     photos
   };
 }
@@ -741,7 +742,14 @@ function mapSimulatedEmailFromDb(row: any): SimulatedEmail {
     body: row.body,
     htmlBody: row.html_body,
     sentAt: row.sent_at,
-    category: row.category
+    category: row.category,
+    isRead: row.is_read !== undefined ? !!row.is_read : false,
+    readAt: row.read_at || undefined,
+    senderId: row.sender_id || undefined,
+    recipientId: row.recipient_id || undefined,
+    farmId: row.farm_id || undefined,
+    relatedType: row.related_type || undefined,
+    relatedId: row.related_id || undefined
   };
 }
 
@@ -873,8 +881,8 @@ async function saveDbToPostgres() {
     // 6. Synchronize Updates
     for (const up of db.updates) {
       await client.query(
-        `INSERT INTO updates (id, farm_id, posted_by, posted_by_name, title, body, update_type, target_investor_ids, is_published, created_at, photos)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO updates (id, farm_id, posted_by, posted_by_name, title, body, update_type, target_investor_ids, is_published, created_at, photos, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (id) DO UPDATE SET
            farm_id = EXCLUDED.farm_id,
            posted_by = EXCLUDED.posted_by,
@@ -885,8 +893,9 @@ async function saveDbToPostgres() {
            target_investor_ids = EXCLUDED.target_investor_ids,
            is_published = EXCLUDED.is_published,
            created_at = EXCLUDED.created_at,
-           photos = EXCLUDED.photos`,
-        [up.id, up.farmId, up.postedBy, up.postedByName, up.title, up.body, up.updateType, JSON.stringify(up.targetInvestorIds || []), up.isPublished, up.createdAt, JSON.stringify(up.photos || [])]
+           photos = EXCLUDED.photos,
+           updated_at = EXCLUDED.updated_at`,
+        [up.id, up.farmId, up.postedBy, up.postedByName, up.title, up.body, up.updateType, JSON.stringify(up.targetInvestorIds || []), up.isPublished, up.createdAt, JSON.stringify(up.photos || []), up.updatedAt || up.createdAt]
       );
     }
 
@@ -933,16 +942,38 @@ async function saveDbToPostgres() {
     // 9. Synchronize Simulated Emails
     for (const email of db.simulatedEmails) {
       await client.query(
-        `INSERT INTO simulated_emails (id, to_address, subject, body, html_body, sent_at, category)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO simulated_emails (id, to_address, subject, body, html_body, sent_at, category, is_read, read_at, sender_id, recipient_id, farm_id, related_type, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (id) DO UPDATE SET
            to_address = EXCLUDED.to_address,
            subject = EXCLUDED.subject,
            body = EXCLUDED.body,
            html_body = EXCLUDED.html_body,
            sent_at = EXCLUDED.sent_at,
-           category = EXCLUDED.category`,
-        [email.id, email.to, email.subject, email.body, email.htmlBody, email.sentAt, email.category]
+           category = EXCLUDED.category,
+           is_read = EXCLUDED.is_read,
+           read_at = EXCLUDED.read_at,
+           sender_id = EXCLUDED.sender_id,
+           recipient_id = EXCLUDED.recipient_id,
+           farm_id = EXCLUDED.farm_id,
+           related_type = EXCLUDED.related_type,
+           related_id = EXCLUDED.related_id`,
+        [
+          email.id,
+          email.to,
+          email.subject,
+          email.body,
+          email.htmlBody,
+          email.sentAt,
+          email.category,
+          !!email.isRead,
+          email.readAt || null,
+          email.senderId || null,
+          email.recipientId || null,
+          email.farmId || null,
+          email.relatedType || null,
+          email.relatedId || null
+        ]
       );
     }
 
@@ -1172,6 +1203,14 @@ async function initPostgres() {
     await pgPool.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(100);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+      ALTER TABLE updates ADD COLUMN IF NOT EXISTS updated_at VARCHAR(100);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS read_at VARCHAR(100);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS sender_id VARCHAR(50);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS recipient_id VARCHAR(50);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS related_type VARCHAR(50);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS related_id VARCHAR(50);
     `);
 
     // Run empty-check for seeding
@@ -1264,19 +1303,34 @@ function saveDb() {
 }
 
 // Simulated real-time triggers for notification emails
-async function dispatchEmail(to: string, subject: string, textBody: string, htmlBody: string, category: string) {
+async function dispatchEmail(
+  to: string,
+  subject: string,
+  textBody: string,
+  htmlBody: string,
+  category: string,
+  extra?: {
+    senderId?: string;
+    recipientId?: string;
+    farmId?: string;
+    relatedType?: 'update' | 'document' | 'financial' | 'welcome';
+    relatedId?: string;
+  }
+) {
   const settings = getSettings();
 
   // 1. Appends to internal simulated log (always record so admins can see in outbox tab)
   const newEmail: SimulatedEmail = {
-    id: 'email-' + Date.now().toString(),
+    id: 'email-' + Date.now().toString() + '-' + Math.floor(Math.random() * 1000),
     to,
     subject,
     body: textBody,
     htmlBody,
     sentAt: new Date().toISOString(),
     category,
-    deliveryStatus: 'simulated'
+    deliveryStatus: 'simulated',
+    isRead: false,
+    ...extra
   };
   db.simulatedEmails.unshift(newEmail);
 
@@ -1724,6 +1778,23 @@ app.get('/api/farms/:id', requireAuth, (req, res) => {
     updates = updates.filter(u => {
       return !u.targetInvestorIds || u.targetInvestorIds.length === 0 || u.targetInvestorIds.includes(user.id);
     });
+
+    let changed = false;
+    db.simulatedEmails.forEach(email => {
+      if (
+        email.to.toLowerCase() === user.email.toLowerCase() &&
+        email.farmId === farmId &&
+        email.relatedType === 'update' &&
+        !email.isRead
+      ) {
+        email.isRead = true;
+        email.readAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveDb();
+    }
   }
 
   // 4. Gather documents
@@ -1886,6 +1957,7 @@ app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), as
     targetInvestorIds,
     isPublished: true,
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     photos: updatePhotosList
   };
 
@@ -1924,7 +1996,14 @@ app.post('/api/updates/farm/:id/new', requireAuth, upload.array('photos', 5), as
          "${newUpdate.body.substring(0, 250)}..."
        </p>
        <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Investor Portal</a></p>`,
-      'Farm Update'
+      'Farm Update',
+      {
+        senderId: user.id,
+        recipientId: investor.id,
+        farmId: farm.id,
+        relatedType: 'update',
+        relatedId: newUpdate.id
+      }
     );
   });
 
@@ -2025,7 +2104,14 @@ app.post('/api/documents/farm/:id/upload', requireAuth, upload.single('file'), a
        </table>
        <p>To safely access and download your document, please authenticately log in to the portal.</p>
        <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Log In & Download Securely</a></p>`,
-      'Document Upload'
+      'Document Upload',
+      {
+        senderId: user.id,
+        recipientId: investor.id,
+        farmId: farm.id,
+        relatedType: 'document',
+        relatedId: newDoc.id
+      }
     );
   });
 
@@ -2070,6 +2156,20 @@ app.get('/api/documents/:id/download', requireAuth, (req, res) => {
 
   if (!isAuthorized) {
     return res.status(403).json({ error: 'Forbidden — You do not have permission to download this secure document' });
+  }
+
+  // Mark related simulated emails as read/opened when downloaded by the investor
+  if (user.role === UserRole.INVESTOR) {
+    db.simulatedEmails.forEach(email => {
+      if (
+        email.to.toLowerCase() === user.email.toLowerCase() &&
+        (email.relatedId === docId || (email.relatedType === 'document' && email.relatedId === docId))
+      ) {
+        email.isRead = true;
+        email.readAt = new Date().toISOString();
+      }
+    });
+    saveDb();
   }
 
   // Handle serving the actual file or a mock file stream if they uploaded standard seeds
@@ -2131,6 +2231,23 @@ app.get('/api/financials/my', requireAuth, (req, res) => {
           farmName: farm?.name
         };
       });
+
+    // Mark related simulated emails as read/opened
+    let changed = false;
+    db.simulatedEmails.forEach(email => {
+      if (
+        email.to.toLowerCase() === user.email.toLowerCase() &&
+        email.relatedType === 'financial' &&
+        !email.isRead
+      ) {
+        email.isRead = true;
+        email.readAt = new Date().toISOString();
+        changed = true;
+      }
+    });
+    if (changed) {
+      saveDb();
+    }
 
     return res.json(summaries);
   }
@@ -2201,7 +2318,14 @@ app.post('/api/financials/upload', requireAuth, (req, res) => {
          </table>
          <p>Log in using your secure dashboard credentials to request disbursement or review balance certificates.</p>
          <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Financial Dashboard</a></p>`,
-        'Financial Addition'
+        'Financial Addition',
+        {
+          senderId: user.id,
+          recipientId: investor.id,
+          farmId: plot?.farmId,
+          relatedType: 'financial',
+          relatedId: newFin.id
+        }
       );
     }
   }
@@ -2262,7 +2386,13 @@ app.post('/api/users/create', requireAuth, (req, res) => {
      </table>
      <p>You are required to log in and change your temporary password immediately upon landing.</p>
      <p><a href="${process.env.APP_URL || 'https://ai.studio/build'}" style="background-color:#1B4332;color:white;padding:10px 20px;text-decoration:none;border-radius:4px;display:inline-block;">Access Login Dashboard</a></p>`,
-    'Welcome Registration'
+    'Welcome Registration',
+    {
+      senderId: user.id,
+      recipientId: createdUser.id,
+      relatedType: 'welcome',
+      relatedId: createdUser.id
+    }
   );
 
   res.status(201).json(createdUser);
@@ -2583,10 +2713,76 @@ app.post('/api/admin/email/test', requireAuth, async (req, res) => {
   }
 });
 
-// Route to get list of emails sent (simulated outbox logs)
+// Route to get list of emails sent (simulated outbox logs with precise role-based access)
 app.get('/api/emails/outbox', requireAuth, (req, res) => {
-  // Let only admin and related users inspect for security, or let anyone see simulated emails in demo mode
-  res.json(db.simulatedEmails);
+  const user = (req as any).user as User;
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  if (user.role === UserRole.ADMIN) {
+    // Super Admin can see all messages/emails
+    return res.json(db.simulatedEmails);
+  }
+
+  if (user.role === UserRole.FARM_MANAGER) {
+    // Farm Managers should see only messages/emails they shared with their attached investors
+    const managedFarmIds = db.assignments
+      .filter(a => a.managerId === user.id && a.isActive)
+      .map(a => a.farmId);
+    
+    const managedPlotIds = db.plots
+      .filter(p => managedFarmIds.includes(p.farmId))
+      .map(p => p.id);
+    
+    const managedInvestorPlots = db.investorPlots
+      .filter(ip => ip.isActive && managedPlotIds.includes(ip.plotId));
+    
+    const attachedInvestorIds = [...new Set(managedInvestorPlots.map(ip => ip.investorId))];
+    
+    const attachedInvestorEmails = db.users
+      .filter(u => attachedInvestorIds.includes(u.id) && u.role === UserRole.INVESTOR)
+      .map(u => u.email.toLowerCase());
+
+    const filtered = db.simulatedEmails.filter(email => {
+      const toLower = (email.to || '').toLowerCase();
+      return (
+        attachedInvestorEmails.includes(toLower) ||
+        email.senderId === user.id ||
+        (email.farmId && managedFarmIds.includes(email.farmId))
+      );
+    });
+    return res.json(filtered);
+  }
+
+  if (user.role === UserRole.INVESTOR) {
+    // Simulated Outbox should only show messages meant for the particular user alone
+    const filtered = db.simulatedEmails.filter(email => {
+      return (email.to || '').toLowerCase() === user.email.toLowerCase();
+    });
+    return res.json(filtered);
+  }
+
+  res.json([]);
+});
+
+// Endpoint to manually mark a simulated email as read/viewed by an investor
+app.post('/api/emails/:id/mark-read', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+  const { id } = req.params;
+  const email = db.simulatedEmails.find(e => e.id === id);
+  if (!email) {
+    return res.status(404).json({ error: 'Email not found' });
+  }
+
+  if (user.role === UserRole.INVESTOR && email.to.toLowerCase() !== user.email.toLowerCase()) {
+    return res.status(403).json({ error: 'Access denied to read receipt confirmation' });
+  }
+
+  email.isRead = true;
+  email.readAt = new Date().toISOString();
+  saveDb();
+  res.json({ success: true, email });
 });
 
 // Route to get user-specific alerts/notifications

@@ -238,8 +238,12 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
                       )}
                       <h3 className="font-sans font-bold text-gray-800 text-sm">{up.title}</h3>
                     </div>
-                    <div className="text-[10px] font-mono text-gray-400">
-                      {new Date(up.createdAt).toDateString()}
+                    <div className="text-[10px] font-mono text-gray-400 text-right">
+                      <div>{new Date(up.createdAt).toDateString()}</div>
+                      <div className="text-[9px] text-[#2D6A4F] font-semibold mt-0.5 flex items-center gap-0.5 justify-end">
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
+                        <span>Updated: {new Date(up.updatedAt || up.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -265,9 +269,15 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 pt-2 text-[10px] font-mono text-gray-400 border-t border-gray-50">
-                    <User className="h-3.5 w-3.5" />
-                    <span>Dispatched by Supervisor: <b className="text-gray-600">{up.postedByName}</b></span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-[10px] font-mono text-gray-400 border-t border-gray-50">
+                    <div className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5" />
+                      <span>Dispatched by Supervisor: <b className="text-gray-600">{up.postedByName}</b></span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-500 bg-gray-50 px-2.5 py-0.5 rounded-md border border-gray-100">
+                      <Clock className="h-3.5 w-3.5 text-[#2D6A4F]" />
+                      <span>Last Updated: <b className="text-[#1B4332]">{new Date(up.updatedAt || up.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</b></span>
+                    </div>
                   </div>
                 </div>
               ))

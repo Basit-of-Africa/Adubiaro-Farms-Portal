@@ -119,6 +119,7 @@ export interface FarmUpdate {
   targetInvestorIds?: string[]; // 1 or more specific investors for personalized updates
   isPublished: boolean;
   createdAt: string;
+  updatedAt?: string;
   photos: UpdatePhoto[];
 }
 
@@ -160,6 +161,13 @@ export interface SimulatedEmail {
   category: string;
   deliveryStatus?: 'simulated' | 'delivered' | 'failed';
   deliveryError?: string;
+  senderId?: string;
+  recipientId?: string;
+  farmId?: string;
+  relatedType?: 'update' | 'document' | 'financial' | 'welcome';
+  relatedId?: string;
+  isRead?: boolean;
+  readAt?: string;
 }
 
 export interface SystemSettings {

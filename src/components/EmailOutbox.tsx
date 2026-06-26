@@ -130,6 +130,19 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
 
                   <h4 className="text-xs font-bold text-gray-800 truncate mb-1">{email.subject}</h4>
                   <p className="text-[10.5px] text-gray-500 font-medium truncate font-sans">To: {email.to}</p>
+                  <div className="flex items-center gap-1 mt-1 text-[10px]">
+                    {email.isRead ? (
+                      <span className="inline-flex items-center gap-0.5 text-emerald-600 font-semibold font-sans">
+                        <CheckCircle2 className="h-3 w-3 shrink-0" />
+                        <span>Read {email.readAt ? `(${new Date(email.readAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})` : ''}</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 text-gray-400 font-sans">
+                        <Mail className="h-3 w-3 shrink-0" />
+                        <span>Unread</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -171,6 +184,20 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
                     <div className="mt-2 text-xs font-mono text-gray-600 space-y-1">
                       <div><b>Recipient:</b> {selectedEmail.to}</div>
                       <div><b>Timestamp:</b> {new Date(selectedEmail.sentAt).toLocaleString()}</div>
+                      <div>
+                        <b>Read Status:</b>{' '}
+                        {selectedEmail.isRead ? (
+                          <span className="text-emerald-600 font-bold font-sans inline-flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Read at {new Date(selectedEmail.readAt!).toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 font-sans inline-flex items-center gap-1">
+                            <Mail className="h-3.5 w-3.5 text-gray-300" />
+                            Unread (Awaiting investor review)
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
