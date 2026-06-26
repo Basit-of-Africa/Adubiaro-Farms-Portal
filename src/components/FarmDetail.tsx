@@ -17,7 +17,10 @@ import {
   AlertCircle,
   Clock,
   ArrowLeft,
-  Briefcase
+  Briefcase,
+  Filter,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import { User as UserType, Farm, FarmPlot, FarmUpdate, Document, UserRole, PlotStatus } from '../types';
 
@@ -41,6 +44,8 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'updates' | 'plots' | 'documents'>('updates');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
 
   const fetchFarmDetails = async () => {
     try {
@@ -126,6 +131,20 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
   }
 
   const { farm, plots, updates, documents } = data;
+
+  // Filter updates by selected date-range
+  const filteredUpdates = updates.filter(up => {
+    if (!up.createdAt) return true;
+    const upDate = new Date(up.createdAt);
+    const yyyy = upDate.getFullYear();
+    const mm = String(upDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(upDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+
+    if (filterStartDate && dateStr < filterStartDate) return false;
+    if (filterEndDate && dateStr > filterEndDate) return false;
+    return true;
+  });
 
   return (
     <div id="farm-detail-stage" className="space-y-8 animate-fade-in">
@@ -214,12 +233,82 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
         {/* UPDATES FEED */}
         {activeTab === 'updates' && (
           <div className="space-y-6">
+            {/* Filter Panel */}
+            {updates.length > 0 && (
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-[#52B788]/10 text-[#1B4332] rounded-xl">
+                    <Filter className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-800">Filter Field Chronicles</h4>
+                    <p className="text-[10px] text-gray-500 font-mono">
+                      {filterStartDate || filterEndDate ? (
+                        <span className="text-emerald-600 font-semibold">Active filter: showing {filteredUpdates.length} of {updates.length} logs</span>
+                      ) : (
+                        `Displaying all ${updates.length} historic updates`
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-semibold text-gray-400 uppercase">From</span>
+                    <input 
+                      type="date"
+                      value={filterStartDate}
+                      onChange={(e) => setFilterStartDate(e.target.value)}
+                      className="bg-gray-50 border border-gray-200 text-xs font-mono rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:border-[#2D6A4F] focus:ring-1 focus:ring-[#2D6A4F] cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-semibold text-gray-400 uppercase">To</span>
+                    <input 
+                      type="date"
+                      value={filterEndDate}
+                      onChange={(e) => setFilterEndDate(e.target.value)}
+                      className="bg-gray-50 border border-gray-200 text-xs font-mono rounded-lg px-2.5 py-1.5 text-gray-700 focus:outline-none focus:border-[#2D6A4F] focus:ring-1 focus:ring-[#2D6A4F] cursor-pointer"
+                    />
+                  </div>
+
+                  {(filterStartDate || filterEndDate) && (
+                    <button
+                      onClick={() => {
+                        setFilterStartDate('');
+                        setFilterEndDate('');
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-900 border border-gray-200 text-xs font-mono font-bold rounded-lg transition duration-200 cursor-pointer"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {updates.length === 0 ? (
               <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-gray-200">
                 <p className="text-xs text-gray-400">No field chronicle updates yet posted for this estate.</p>
               </div>
+            ) : filteredUpdates.length === 0 ? (
+              <div className="bg-white p-12 text-center rounded-2xl border border-dashed border-gray-200 space-y-3">
+                <p className="text-xs text-gray-500">No operations updates match the selected date range.</p>
+                <button
+                  onClick={() => {
+                    setFilterStartDate('');
+                    setFilterEndDate('');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#1B4332] text-white text-xs font-mono font-bold rounded-lg cursor-pointer hover:bg-[#2D6A4F] transition shadow-sm"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Reset Filters</span>
+                </button>
+              </div>
             ) : (
-              updates.map((up) => (
+              filteredUpdates.map((up) => (
                 <div key={up.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
                   <div className="flex items-center justify-between border-b border-gray-50 pb-3">
                     <div className="flex items-center gap-2">
