@@ -150,7 +150,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
           >
             <Mail className="h-4.5 w-4.5" />
             <div className="flex items-center justify-between w-full">
-              <span>Simulated Outbox</span>
+              <span>Mailings</span>
               <span className="bg-[#D4A017] text-[#0A2619] text-[8px] px-2 py-0.5 rounded-full font-mono font-black border border-[#D4A017]/30">LIVE</span>
             </div>
           </button>
