@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { User as UserType, Farm, FarmPlot, FarmUpdate, Document, UserRole, PlotStatus } from '../types';
 import CommentsSection from './CommentsSection';
+import { getRelativeTime } from '../utils/time';
 
 interface FarmDetailProps {
   user: UserType;
@@ -329,10 +330,10 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
                       <h3 className="font-sans font-bold text-gray-800 text-sm">{up.title}</h3>
                     </div>
                     <div className="text-[10px] font-mono text-gray-400 text-right">
-                      <div>{new Date(up.createdAt).toDateString()}</div>
-                      <div className="text-[9px] text-[#2D6A4F] font-semibold mt-0.5 flex items-center gap-0.5 justify-end">
-                        <Clock className="h-2.5 w-2.5 shrink-0" />
-                        <span>Updated: {new Date(up.updatedAt || up.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <div className="font-bold text-[#1B4332]" title={new Date(up.createdAt).toLocaleString()}>{getRelativeTime(up.createdAt)}</div>
+                      <div className="text-[9px] text-gray-400 mt-0.5 flex items-center gap-0.5 justify-end">
+                        <Clock className="h-2.5 w-2.5 shrink-0 text-gray-400" />
+                        <span>{new Date(up.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })} at {new Date(up.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     </div>
                   </div>

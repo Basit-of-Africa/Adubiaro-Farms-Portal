@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { User, Farm } from '../types';
 import CommentsSection from './CommentsSection';
+import { getRelativeTime } from '../utils/time';
 
 interface ManagerDashboardProps {
   user: User;
@@ -415,7 +416,9 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                       <div className="flex items-center justify-between border-b border-gray-50 pb-2">
                         <div className="flex flex-col">
                           <span className="text-[10px] font-mono text-[#1B4332] font-extrabold">{up.farmName}</span>
-                          <span className="text-[9px] font-mono text-gray-400">{new Date(up.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                          <span className="text-[9px] font-mono text-gray-400" title={new Date(up.createdAt).toLocaleString()}>
+                            {getRelativeTime(up.createdAt)} • {new Date(up.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          </span>
                         </div>
                         <span className="text-[9px] font-mono font-bold bg-[#52B788]/10 text-[#1B4332] px-2 py-0.5 rounded-full uppercase border border-[#52B788]/20">
                           {up.updateType}
