@@ -686,6 +686,14 @@ function mapUpdateFromDb(row: any): FarmUpdate {
         ? JSON.parse(row.photos)
         : JSON.parse(JSON.stringify(row.photos));
   }
+  let comments: any[] = [];
+  if (row.comments) {
+    comments = Array.isArray(row.comments)
+      ? row.comments
+      : typeof row.comments === 'string'
+        ? JSON.parse(row.comments)
+        : JSON.parse(JSON.stringify(row.comments));
+  }
   return {
     id: row.id,
     farmId: row.farm_id,
@@ -698,7 +706,8 @@ function mapUpdateFromDb(row: any): FarmUpdate {
     isPublished: Boolean(row.is_published),
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
-    photos
+    photos,
+    comments
   };
 }
 
@@ -881,8 +890,8 @@ async function saveDbToPostgres() {
     // 6. Synchronize Updates
     for (const up of db.updates) {
       await client.query(
-        `INSERT INTO updates (id, farm_id, posted_by, posted_by_name, title, body, update_type, target_investor_ids, is_published, created_at, photos, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `INSERT INTO updates (id, farm_id, posted_by, posted_by_name, title, body, update_type, target_investor_ids, is_published, created_at, photos, updated_at, comments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (id) DO UPDATE SET
            farm_id = EXCLUDED.farm_id,
            posted_by = EXCLUDED.posted_by,
@@ -894,8 +903,9 @@ async function saveDbToPostgres() {
            is_published = EXCLUDED.is_published,
            created_at = EXCLUDED.created_at,
            photos = EXCLUDED.photos,
-           updated_at = EXCLUDED.updated_at`,
-        [up.id, up.farmId, up.postedBy, up.postedByName, up.title, up.body, up.updateType, JSON.stringify(up.targetInvestorIds || []), up.isPublished, up.createdAt, JSON.stringify(up.photos || []), up.updatedAt || up.createdAt]
+           updated_at = EXCLUDED.updated_at,
+           comments = EXCLUDED.comments`,
+        [up.id, up.farmId, up.postedBy, up.postedByName, up.title, up.body, up.updateType, JSON.stringify(up.targetInvestorIds || []), up.isPublished, up.createdAt, JSON.stringify(up.photos || []), up.updatedAt || up.createdAt, JSON.stringify(up.comments || [])]
       );
     }
 
@@ -1157,7 +1167,8 @@ async function initPostgres() {
         target_investor_ids JSONB DEFAULT '[]',
         is_published BOOLEAN DEFAULT TRUE,
         created_at VARCHAR(100) NOT NULL,
-        photos JSONB DEFAULT '[]'
+        photos JSONB DEFAULT '[]',
+        comments JSONB DEFAULT '[]'
       );
 
       CREATE TABLE IF NOT EXISTS documents (
@@ -1204,6 +1215,7 @@ async function initPostgres() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(100);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
       ALTER TABLE updates ADD COLUMN IF NOT EXISTS updated_at VARCHAR(100);
+      ALTER TABLE updates ADD COLUMN IF NOT EXISTS comments JSONB DEFAULT '[]';
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS read_at VARCHAR(100);
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS sender_id VARCHAR(50);
@@ -1755,6 +1767,112 @@ app.get('/api/updates/manager', requireAuth, (req, res) => {
   });
 
   res.json(updatesWithFarmInfo);
+});
+
+// Post a comment / reply to a farm update (nested comment threading)
+app.post('/api/updates/:updateId/comments', requireAuth, async (req, res) => {
+  const { updateId } = req.params;
+  const { content, parentId } = req.body;
+  const user = (req as any).user as User;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment content is required' });
+  }
+
+  const update = db.updates.find(u => u.id === updateId);
+  if (!update) {
+    return res.status(404).json({ error: 'Farm update not found' });
+  }
+
+  // Check access authorization
+  let authorized = false;
+  if (user.role === UserRole.ADMIN) {
+    authorized = true;
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    authorized = db.assignments.some(a => a.managerId === user.id && a.farmId === update.farmId && a.isActive);
+  } else if (user.role === UserRole.INVESTOR) {
+    const investorPlotsList = db.investorPlots.filter(ip => ip.investorId === user.id && ip.isActive);
+    const plotIds = investorPlotsList.map(ip => ip.plotId);
+    const ownsPlotInFarm = db.plots.some(p => p.farmId === update.farmId && plotIds.includes(p.id));
+    const isTargeted = !update.targetInvestorIds || update.targetInvestorIds.length === 0 || update.targetInvestorIds.includes(user.id);
+    if (ownsPlotInFarm && isTargeted) {
+      authorized = true;
+    }
+  }
+
+  if (!authorized) {
+    return res.status(403).json({ error: 'You are not authorized to comment on this update' });
+  }
+
+  if (!update.comments) {
+    update.comments = [];
+  }
+
+  const newComment = {
+    id: 'comment-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    updateId,
+    parentId: parentId || null,
+    userId: user.id,
+    userName: user.name,
+    userRole: user.role,
+    content: content.trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  update.comments.push(newComment);
+  
+  // Persist update changes
+  saveDb();
+
+  res.status(201).json(newComment);
+});
+
+// Delete a comment / reply thread
+app.delete('/api/updates/:updateId/comments/:commentId', requireAuth, async (req, res) => {
+  const { updateId, commentId } = req.params;
+  const user = (req as any).user as User;
+
+  const update = db.updates.find(u => u.id === updateId);
+  if (!update) {
+    return res.status(404).json({ error: 'Farm update not found' });
+  }
+
+  if (!update.comments) {
+    update.comments = [];
+  }
+
+  const commentIndex = update.comments.findIndex(c => c.id === commentId);
+  if (commentIndex === -1) {
+    return res.status(404).json({ error: 'Comment not found' });
+  }
+
+  const comment = update.comments[commentIndex];
+
+  // Authorized if user is author or Admin
+  if (comment.userId !== user.id && user.role !== UserRole.ADMIN) {
+    return res.status(403).json({ error: 'You are not authorized to delete this comment' });
+  }
+
+  // Delete comment
+  update.comments.splice(commentIndex, 1);
+
+  // Recursively delete sub-threaded replies
+  const deleteChildComments = (pId: string) => {
+    if (!update.comments) return;
+    const children = update.comments.filter(c => c.parentId === pId);
+    children.forEach(child => {
+      const idx = update.comments!.findIndex(c => c.id === child.id);
+      if (idx !== -1) {
+        update.comments!.splice(idx, 1);
+        deleteChildComments(child.id);
+      }
+    });
+  };
+  deleteChildComments(commentId);
+
+  saveDb();
+
+  res.json({ success: true, message: 'Comment and replies deleted successfully' });
 });
 
 // Single Farm Details API (with Updates, Documents, Plots checked cleanly)

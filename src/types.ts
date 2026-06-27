@@ -108,6 +108,17 @@ export interface UpdatePhoto {
   caption: string;
 }
 
+export interface FarmUpdateComment {
+  id: string;
+  updateId: string;
+  parentId: string | null;
+  userId: string;
+  userName: string;
+  userRole: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface FarmUpdate {
   id: string;
   farmId: string;
@@ -121,6 +132,7 @@ export interface FarmUpdate {
   createdAt: string;
   updatedAt?: string;
   photos: UpdatePhoto[];
+  comments?: FarmUpdateComment[];
 }
 
 export interface Document {

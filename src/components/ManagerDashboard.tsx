@@ -26,6 +26,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { User, Farm } from '../types';
+import CommentsSection from './CommentsSection';
 
 interface ManagerDashboardProps {
   user: User;
@@ -449,6 +450,14 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                           </span>
                         )}
                       </div>
+
+                      <CommentsSection
+                        updateId={up.id}
+                        comments={up.comments}
+                        currentUser={user}
+                        token={token}
+                        onCommentAdded={fetchFeedUpdates}
+                      />
                     </div>
                   ))}
                 </div>

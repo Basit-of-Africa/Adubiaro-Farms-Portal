@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import { User as UserType, Farm, FarmPlot, FarmUpdate, Document, UserRole, PlotStatus } from '../types';
+import CommentsSection from './CommentsSection';
 
 interface FarmDetailProps {
   user: UserType;
@@ -368,6 +369,14 @@ export default function FarmDetail({ user, token, farmId, onBack, refreshSignal 
                       <span>Last Updated: <b className="text-[#1B4332]">{new Date(up.updatedAt || up.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</b></span>
                     </div>
                   </div>
+
+                  <CommentsSection
+                    updateId={up.id}
+                    comments={up.comments}
+                    currentUser={user}
+                    token={token}
+                    onCommentAdded={fetchFarmDetails}
+                  />
                 </div>
               ))
             )}
