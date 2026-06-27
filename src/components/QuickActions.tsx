@@ -447,6 +447,22 @@ export default function QuickActions({ user, token, onTabChange, onRefresh }: Qu
                       </div>
                       <ChevronRight className="h-4 w-4 text-gray-300" />
                     </button>
+
+                    <button
+                      onClick={() => { setActiveModal('update'); setIsOpen(false); }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-stone-50 flex items-center justify-between text-xs text-gray-700 cursor-pointer transition group border-t border-gray-50 pt-3"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="p-2 bg-[#52B788]/10 rounded-lg text-[#1B4332] group-hover:bg-[#52B788]/25 transition">
+                          <Sprout className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-800">Post Update</p>
+                          <p className="text-[10px] text-gray-400 font-normal">Publish chronicles across estates</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                    </button>
                   </>
                 )}
 
@@ -551,7 +567,7 @@ export default function QuickActions({ user, token, onTabChange, onRefresh }: Qu
           id="btn-quick-actions"
         >
           {/* Subtle glowing ring */}
-          <div className="absolute inset-0 bg-radial from-[#52B788]/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <div className="absolute inset-0 bg-[#52B788]/10 bg-radial from-[#52B788]/30 via-transparent to-transparent opacity-10 group-hover:opacity-100 transition-all duration-300 scale-95 hover:scale-105 border border-dashed border-[#52B788]/40 rounded-full" />
           <AnimatePresence mode="wait">
             {isOpen ? (
               <motion.div
