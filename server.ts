@@ -1727,6 +1727,36 @@ app.get('/api/farms', requireAuth, (req, res) => {
   res.json([]);
 });
 
+// Get Updates Feed for Supervisor/Manager Dashboard
+app.get('/api/updates/manager', requireAuth, (req, res) => {
+  const user = (req as any).user as User;
+
+  let assignedFarmIds: string[] = [];
+  if (user.role === UserRole.ADMIN) {
+    assignedFarmIds = db.farms.map(f => f.id);
+  } else if (user.role === UserRole.FARM_MANAGER) {
+    assignedFarmIds = db.assignments
+      .filter(a => a.managerId === user.id && a.isActive)
+      .map(a => a.farmId);
+  } else {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  // Filter updates for these farms
+  const managerUpdates = db.updates.filter(u => assignedFarmIds.includes(u.farmId));
+  
+  // Attach farm names to the response items
+  const updatesWithFarmInfo = managerUpdates.map(u => {
+    const farm = db.farms.find(f => f.id === u.farmId);
+    return {
+      ...u,
+      farmName: farm ? farm.name : 'Unknown Estate'
+    };
+  });
+
+  res.json(updatesWithFarmInfo);
+});
+
 // Single Farm Details API (with Updates, Documents, Plots checked cleanly)
 app.get('/api/farms/:id', requireAuth, (req, res) => {
   const user = (req as any).user as User;

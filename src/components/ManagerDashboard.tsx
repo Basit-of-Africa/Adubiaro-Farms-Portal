@@ -14,7 +14,16 @@ import {
   Image as ImageIcon, 
   Send,
   Upload,
-  UserCheck
+  UserCheck,
+  Camera,
+  Trash2,
+  Video,
+  AlertTriangle,
+  Check,
+  Clock,
+  Eye,
+  Tag,
+  Sliders
 } from 'lucide-react';
 import { User, Farm } from '../types';
 
@@ -42,6 +51,17 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
   const [updateSuccess, setUpdateSuccess] = useState<string | null>(null);
   const [updateLoading, setUpdateLoading] = useState(false);
 
+  // Camera & Feed states
+  const [photoMode, setPhotoMode] = useState<'upload' | 'camera'>('upload');
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraPreviewUrl, setCameraPreviewUrl] = useState<string | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const [feedUpdates, setFeedUpdates] = useState<any[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+
   // Personalized targeting states
   const [farmInvestors, setFarmInvestors] = useState<User[]>([]);
   const [selectedInvestorIds, setSelectedInvestorIds] = useState<string[]>([]);
@@ -55,6 +75,89 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docSuccess, setDocSuccess] = useState<string | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+
+  const startCamera = async () => {
+    setCameraError(null);
+    setCameraPreviewUrl(null);
+    setIsCameraActive(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      setCameraStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(err => console.error("Video play failed", err));
+      }
+    } catch (err: any) {
+      console.error('Camera access failed:', err);
+      setCameraError('Could not access camera. Please check your system/browser permissions.');
+      setIsCameraActive(false);
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const captureSnapshot = () => {
+    if (!videoRef.current) return;
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setCameraPreviewUrl(dataUrl);
+        
+        // Convert base64 dataUrl to standard File
+        const byteString = atob(dataUrl.split(',')[1]);
+        const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeString });
+        const file = new File([blob], `status-snapshot-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        
+        setUpdateFile(file);
+        if (!updateCaption) {
+          setUpdateCaption(`Live field snapshot captured on ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+        }
+      }
+      stopCamera();
+    } catch (err) {
+      console.error('Snapshot capture failed:', err);
+      setCameraError('Failed to capture snapshot from camera feed.');
+    }
+  };
+
+  const fetchFeedUpdates = async () => {
+    try {
+      setFeedLoading(true);
+      const res = await fetch('/api/updates/manager', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Sort by date descending
+        data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setFeedUpdates(data);
+      }
+    } catch (err) {
+      console.error('Error fetching manager feed updates:', err);
+    } finally {
+      setFeedLoading(false);
+    }
+  };
 
   const fetchAssignedFarms = async () => {
     try {
@@ -95,7 +198,22 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
 
   useEffect(() => {
     fetchAssignedFarms();
+    fetchFeedUpdates();
   }, [token, refreshSignal]);
+
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  useEffect(() => {
+    if (isCameraActive && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [isCameraActive, cameraStream]);
 
   useEffect(() => {
     if (selectedFarmId) {
@@ -147,6 +265,9 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
       setUpdateBody('');
       setUpdateFile(null);
       setUpdateCaption('');
+      setCameraPreviewUrl(null);
+      setPhotoMode('upload');
+      stopCamera();
       setSelectedInvestorIds([]);
       setIsPersonalized(false);
       triggerRefreshSignal();
@@ -256,6 +377,82 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Live Operational Feed */}
+            <div className="space-y-4 pt-6 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-sans font-extrabold text-xs text-[#2c3e35]/70 uppercase tracking-wider font-mono">Live Operations Feed</h2>
+                  <p className="text-[10px] text-gray-400 font-mono">Recent chronicles across your estates</p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={fetchFeedUpdates}
+                  disabled={feedLoading}
+                  className="p-1.5 hover:bg-gray-100 text-gray-500 rounded-lg transition cursor-pointer"
+                  title="Reload feed"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${feedLoading ? 'animate-spin text-[#1B4332]' : ''}`} />
+                </button>
+              </div>
+
+              {feedLoading && feedUpdates.length === 0 ? (
+                <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#1B4332] border-t-transparent mx-auto" />
+                  <p className="text-[10px] text-gray-400 mt-2 font-mono">Syncing farm feed...</p>
+                </div>
+              ) : feedUpdates.length === 0 ? (
+                <div className="bg-white p-8 rounded-2xl border border-gray-100 text-center text-gray-400">
+                  <Sprout className="h-8 w-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-xs font-sans">No updates posted yet on your assigned estates.</p>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                  {feedUpdates.map((up) => (
+                    <div key={up.id} className="bg-white p-4 rounded-2xl border border-[#2D6A4F]/10 shadow-sm space-y-3 hover:border-[#2D6A4F]/30 transition duration-200">
+                      <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-mono text-[#1B4332] font-extrabold">{up.farmName}</span>
+                          <span className="text-[9px] font-mono text-gray-400">{new Date(up.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+                        </div>
+                        <span className="text-[9px] font-mono font-bold bg-[#52B788]/10 text-[#1B4332] px-2 py-0.5 rounded-full uppercase border border-[#52B788]/20">
+                          {up.updateType}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-gray-800 font-sans">{up.title}</h4>
+                        <p className="text-[11px] text-gray-600 font-sans leading-relaxed whitespace-pre-wrap">{up.body}</p>
+                      </div>
+
+                      {up.photos && up.photos.length > 0 && (
+                        <div className="space-y-1">
+                          <img 
+                            src={up.photos[0].url} 
+                            alt={up.photos[0].caption || 'Snapshot'} 
+                            referrerPolicy="no-referrer"
+                            className="w-full h-32 object-cover rounded-xl border border-gray-100"
+                          />
+                          {up.photos[0].caption && (
+                            <p className="text-[9px] text-gray-400 font-mono italic">{up.photos[0].caption}</p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 border-t border-gray-50 text-[9px] font-mono text-gray-400">
+                        <span>By: <b className="text-gray-600">{up.postedByName}</b></span>
+                        {up.targetInvestorIds && up.targetInvestorIds.length > 0 && (
+                          <span className="text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/40 flex items-center gap-0.5">
+                            <Eye className="h-2.5 w-2.5" />
+                            Targeted
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -400,17 +597,140 @@ export default function ManagerDashboard({ user, token, onSelectFarm, triggerRef
                     onChange={(e) => setUpdateBody(e.target.value)}
                     className="w-full text-xs bg-[#FBF9F4]/40 border border-gray-150 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
                   />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                </div>                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400 tracking-wider">Attach Field Photo</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => setUpdateFile(e.target.files?.[0] || null)}
-                      className="w-full text-xs border border-dashed border-gray-300 rounded-xl p-2.5 bg-[#FBF9F4]/40 focus:ring-2 focus:ring-[#1B4332]"
-                    />
+                    <label className="block text-[10px] uppercase font-mono font-bold mb-1.5 text-gray-400 tracking-wider">Attach Snapshot / Photo</label>
+                    
+                    <div className="flex bg-gray-100 p-1 rounded-xl text-[10px] font-mono font-bold mb-3 border border-gray-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoMode('upload');
+                          stopCamera();
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all duration-150 cursor-pointer ${
+                          photoMode === 'upload' ? 'bg-white text-[#1B4332] shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        <Upload className="h-3 w-3" />
+                        <span>Upload File</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhotoMode('camera');
+                          startCamera();
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg flex items-center justify-center gap-1 transition-all duration-150 cursor-pointer ${
+                          photoMode === 'camera' ? 'bg-white text-[#1B4332] shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                      >
+                        <Camera className="h-3 w-3" />
+                        <span>Live Camera</span>
+                      </button>
+                    </div>
+
+                    {photoMode === 'upload' ? (
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          setUpdateFile(e.target.files?.[0] || null);
+                          setCameraPreviewUrl(null);
+                        }}
+                        className="w-full text-xs border border-dashed border-gray-300 rounded-xl p-2.5 bg-[#FBF9F4]/40 focus:ring-2 focus:ring-[#1B4332] cursor-pointer"
+                      />
+                    ) : (
+                      <div className="space-y-3 bg-[#FBF9F4]/40 border border-[#2D6A4F]/10 rounded-xl p-3">
+                        {cameraError && (
+                          <div className="flex items-start gap-1.5 p-2 bg-red-50 text-red-700 rounded-lg text-[10px] font-semibold border border-red-100">
+                            <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                            <span>{cameraError}</span>
+                          </div>
+                        )}
+
+                        {isCameraActive && (
+                          <div className="relative bg-black rounded-lg overflow-hidden aspect-video max-h-48 flex items-center justify-center shadow-inner">
+                            <video 
+                              ref={videoRef}
+                              autoPlay 
+                              playsInline 
+                              muted
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2 px-3">
+                              <button
+                                type="button"
+                                onClick={captureSnapshot}
+                                className="bg-[#1B4332] hover:bg-[#2D6A4F] text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow cursor-pointer transition"
+                              >
+                                <Camera className="h-3.5 w-3.5" />
+                                <span>Capture Snapshot</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={stopCamera}
+                                className="bg-gray-800/85 hover:bg-gray-850 text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-lg cursor-pointer transition"
+                              >
+                                <span>Cancel</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {!isCameraActive && !cameraPreviewUrl && (
+                          <button
+                            type="button"
+                            onClick={startCamera}
+                            className="w-full py-6 border border-dashed border-[#2D6A4F]/25 hover:border-[#2D6A4F] text-[#1B4332] text-xs font-mono font-bold rounded-lg bg-emerald-50/20 hover:bg-emerald-50/40 flex flex-col items-center justify-center gap-2 transition cursor-pointer"
+                          >
+                            <Video className="h-6 w-6 text-[#2D6A4F] animate-pulse" />
+                            <span>Click to Start Device Camera</span>
+                          </button>
+                        )}
+
+                        {cameraPreviewUrl && (
+                          <div className="space-y-2">
+                            <div className="relative rounded-lg overflow-hidden border border-[#2D6A4F]/20 aspect-video max-h-48 shadow-sm">
+                              <img 
+                                src={cameraPreviewUrl} 
+                                alt="Captured live snapshot" 
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute top-2 right-2 flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCameraPreviewUrl(null);
+                                    setUpdateFile(null);
+                                    startCamera();
+                                  }}
+                                  className="bg-gray-800/95 text-white p-1.5 rounded-lg hover:bg-gray-950 transition cursor-pointer"
+                                  title="Retake Snapshot"
+                                >
+                                  <Camera className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCameraPreviewUrl(null);
+                                    setUpdateFile(null);
+                                  }}
+                                  className="bg-red-600/90 text-white p-1.5 rounded-lg hover:bg-red-700 transition cursor-pointer"
+                                  title="Discard Snapshot"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div className="absolute bottom-2 left-2 bg-emerald-600/90 text-white text-[9px] font-mono font-semibold px-2 py-0.5 rounded flex items-center gap-0.5 shadow-sm">
+                                <Check className="h-3 w-3" />
+                                <span>Snapshot Loaded</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[10px] uppercase font-mono font-bold mb-1 text-gray-400 tracking-wider">Photo caption</label>

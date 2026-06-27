@@ -1,6 +1,6 @@
 {
   "name": "Farm Estate Portal",
   "description": "A private client portal where agro-real-estate investors, farm managers, and admins monitor investments, share farm updates, distribute documents, and track ROI payouts.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
