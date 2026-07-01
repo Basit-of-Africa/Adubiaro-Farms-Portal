@@ -17,6 +17,7 @@ import SettingsView from './components/SettingsView';
 import QuickActions from './components/QuickActions';
 import GlobalSearch from './components/GlobalSearch';
 import OnboardingTour from './components/OnboardingTour';
+import InvestorsView from './components/InvestorsView';
 import { User, UserRole } from './types';
 import { 
   Sprout, 
@@ -379,6 +380,28 @@ export default function App() {
               token={authToken} 
               triggerRefreshSignal={triggerRefreshSignal} 
               refreshSignal={refreshSignal} 
+            />
+          )
+        )}
+
+        {/* INVESTORS DIRECTORY MANAGEMENT TAB */}
+        {activeTab === 'investors' && (
+          (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) ? (
+            <div className="p-8 bg-red-50 border-l-4 border-red-500 rounded-2xl flex items-start gap-3">
+              <ShieldAlert className="text-red-500 h-6 w-6 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-sans font-bold text-sm text-red-800">403 Access Unauthorized</h3>
+                <p className="text-xs text-red-700 mt-1 max-w-xl">
+                  You do not have administrative clearance to access the interactive investors directory.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <InvestorsView 
+              user={currentUser} 
+              token={authToken} 
+              refreshSignal={refreshSignal}
+              triggerRefreshSignal={triggerRefreshSignal}
             />
           )
         )}

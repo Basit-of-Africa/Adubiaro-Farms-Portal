@@ -180,6 +180,9 @@ export interface SimulatedEmail {
   relatedId?: string;
   isRead?: boolean;
   readAt?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentType?: string;
 }
 
 export interface SystemSettings {

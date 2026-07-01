@@ -104,7 +104,8 @@ async function sendSmtpEmail({
   to,
   subject,
   text,
-  html
+  html,
+  attachments
 }: {
   host: string;
   port: number;
@@ -116,6 +117,7 @@ async function sendSmtpEmail({
   subject: string;
   text: string;
   html: string;
+  attachments?: any[];
 }) {
   const transporter = nodemailer.createTransport({
     host,
@@ -135,7 +137,8 @@ async function sendSmtpEmail({
     to,
     subject,
     text,
-    html
+    html,
+    attachments
   });
 }
 
@@ -758,7 +761,10 @@ function mapSimulatedEmailFromDb(row: any): SimulatedEmail {
     recipientId: row.recipient_id || undefined,
     farmId: row.farm_id || undefined,
     relatedType: row.related_type || undefined,
-    relatedId: row.related_id || undefined
+    relatedId: row.related_id || undefined,
+    attachmentUrl: row.attachment_url || undefined,
+    attachmentName: row.attachment_name || undefined,
+    attachmentType: row.attachment_type || undefined
   };
 }
 
@@ -952,8 +958,8 @@ async function saveDbToPostgres() {
     // 9. Synchronize Simulated Emails
     for (const email of db.simulatedEmails) {
       await client.query(
-        `INSERT INTO simulated_emails (id, to_address, subject, body, html_body, sent_at, category, is_read, read_at, sender_id, recipient_id, farm_id, related_type, related_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        `INSERT INTO simulated_emails (id, to_address, subject, body, html_body, sent_at, category, is_read, read_at, sender_id, recipient_id, farm_id, related_type, related_id, attachment_url, attachment_name, attachment_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
          ON CONFLICT (id) DO UPDATE SET
            to_address = EXCLUDED.to_address,
            subject = EXCLUDED.subject,
@@ -967,7 +973,10 @@ async function saveDbToPostgres() {
            recipient_id = EXCLUDED.recipient_id,
            farm_id = EXCLUDED.farm_id,
            related_type = EXCLUDED.related_type,
-           related_id = EXCLUDED.related_id`,
+           related_id = EXCLUDED.related_id,
+           attachment_url = EXCLUDED.attachment_url,
+           attachment_name = EXCLUDED.attachment_name,
+           attachment_type = EXCLUDED.attachment_type`,
         [
           email.id,
           email.to,
@@ -982,7 +991,10 @@ async function saveDbToPostgres() {
           email.recipientId || null,
           email.farmId || null,
           email.relatedType || null,
-          email.relatedId || null
+          email.relatedId || null,
+          email.attachmentUrl || null,
+          email.attachmentName || null,
+          email.attachmentType || null
         ]
       );
     }
@@ -1223,6 +1235,9 @@ async function initPostgres() {
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS farm_id VARCHAR(50);
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS related_type VARCHAR(50);
       ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS related_id VARCHAR(50);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS attachment_url VARCHAR(512);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);
+      ALTER TABLE simulated_emails ADD COLUMN IF NOT EXISTS attachment_type VARCHAR(50);
     `);
 
     // Run empty-check for seeding
@@ -1327,6 +1342,9 @@ async function dispatchEmail(
     farmId?: string;
     relatedType?: 'update' | 'document' | 'financial' | 'welcome';
     relatedId?: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
+    attachmentType?: string;
   }
 ) {
   const settings = getSettings();
@@ -1352,6 +1370,15 @@ async function dispatchEmail(
   if (svc === 'smtp') {
     if (settings.smtpHost) {
       try {
+        const attachments = extra?.attachmentUrl ? [
+          {
+            filename: extra.attachmentName || 'attachment',
+            path: extra.attachmentUrl.startsWith('/') 
+              ? path.join(process.cwd(), extra.attachmentUrl) 
+              : extra.attachmentUrl
+          }
+        ] : undefined;
+
         await sendSmtpEmail({
           host: settings.smtpHost,
           port: settings.smtpPort || 587,
@@ -1362,7 +1389,8 @@ async function dispatchEmail(
           to,
           subject,
           text: textBody,
-          html: htmlBody
+          html: htmlBody,
+          attachments
         });
         newEmail.deliveryStatus = 'delivered';
         console.log(`📧 Fully routed REAL SMTP Email to ${to}: ${subject}`);
@@ -2549,8 +2577,8 @@ app.post('/api/users/create', requireAuth, (req, res) => {
 // Admin Route to list system users list
 app.get('/api/admin/users', requireAuth, (req, res) => {
   const user = (req as any).user as User;
-  if (user.role !== UserRole.ADMIN) {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (user.role !== UserRole.ADMIN && user.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
   }
   res.json(db.users);
 });
@@ -2558,13 +2586,13 @@ app.get('/api/admin/users', requireAuth, (req, res) => {
 // Admin Route to toggle active status of a user
 app.post('/api/admin/users/:id/toggle-active', requireAuth, (req, res) => {
   const currentUser = (req as any).user as User;
-  if (currentUser.role !== UserRole.ADMIN) {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
   }
 
   const targetUserId = req.params.id;
   if (targetUserId === currentUser.id) {
-    return res.status(400).json({ error: 'You cannot deactivate your own super admin account.' });
+    return res.status(400).json({ error: 'You cannot deactivate your own account.' });
   }
 
   const targetUser = db.users.find(u => u.id === targetUserId);
@@ -2579,16 +2607,145 @@ app.post('/api/admin/users/:id/toggle-active', requireAuth, (req, res) => {
   res.json({ success: true, user: targetUser });
 });
 
+// Admin Route to update a user's details
+app.post('/api/admin/users/:id/update', requireAuth, (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
+  }
+
+  const targetUserId = req.params.id;
+  const targetUser = db.users.find(u => u.id === targetUserId);
+  if (!targetUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const { name, email, phone, username, role, isActive } = req.body;
+
+  if (username && username !== targetUser.username) {
+    const existingUser = db.users.find(u => u.username === username);
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+    targetUser.username = username;
+  }
+
+  if (name) targetUser.name = name;
+  if (email) targetUser.email = email;
+  if (phone) targetUser.phone = phone;
+  if (role) targetUser.role = role as UserRole;
+  if (typeof isActive === 'boolean') targetUser.isActive = isActive;
+
+  saveDb();
+  res.json({ success: true, user: targetUser });
+});
+
+// Admin Route to message a user directly
+app.post('/api/admin/users/:id/message', requireAuth, upload.single('attachment'), async (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
+  }
+
+  const targetUserId = req.params.id;
+  const targetUser = db.users.find(u => u.id === targetUserId);
+  if (!targetUser) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const { subject, body } = req.body;
+  if (!subject || !body) {
+    return res.status(400).json({ error: 'Subject and body are required.' });
+  }
+
+  let fileUrl = '';
+  let fileName = '';
+  let fileType = '';
+
+  if (req.file) {
+    const file = req.file;
+    fileName = file.originalname;
+    fileUrl = `/uploads/${file.filename}`;
+    fileType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+
+    if (process.env.CLOUDINARY_URL) {
+      try {
+        const cld = getCloudinary();
+        const cldRes = await cld.uploader.upload(file.path, {
+          folder: 'direct_messages',
+          resource_type: 'auto'
+        });
+        fileUrl = cldRes.secure_url;
+        fs.unlinkSync(file.path);
+      } catch (e) {
+        console.error('Cloudinary message upload failure, using local route instead', e);
+      }
+    }
+  }
+
+  let mediaHtml = '';
+  if (fileUrl) {
+    if (fileType === 'image') {
+      mediaHtml = `
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+          <p style="font-size: 12px; color: #555; margin-bottom: 8px;"><b>Attached Image:</b> ${fileName}</p>
+          <img src="${fileUrl}" style="max-width: 100%; border-radius: 8px; border: 1px solid #ddd;" alt="${fileName}" />
+          <p style="font-size: 11px; margin-top: 5px;"><a href="${fileUrl}" target="_blank" style="color: #1B4332; text-decoration: underline;">View Full Image</a></p>
+        </div>
+      `;
+    } else {
+      mediaHtml = `
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+          <p style="font-size: 12px; color: #555; margin-bottom: 8px;"><b>Attached Video:</b> ${fileName}</p>
+          <div style="padding: 12px; background-color: #f9f9f9; border-radius: 8px; border: 1px solid #eee;">
+            <a href="${fileUrl}" target="_blank" style="color: #1B4332; font-weight: bold; text-decoration: underline;">▶ Play Attached Video</a>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  const textBody = fileUrl ? `${body}\n\n[Attachment: ${fileName} - ${fileUrl}]` : body;
+
+  try {
+    await dispatchEmail(
+      targetUser.email,
+      subject,
+      textBody,
+      `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 12px;">
+        <h3 style="color: #1B4332; margin-top: 0;">Message from ${currentUser.name} (${currentUser.role === UserRole.ADMIN ? 'Administrator' : 'Farm Manager'})</h3>
+        <p>${body.replace(/\n/g, '<br/>')}</p>
+        ${mediaHtml}
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 11px; color: #888;">This email is dispatched from Adubiaro Farm Estates Private Portal.</p>
+      </div>`,
+      'Direct Communication',
+      {
+        senderId: currentUser.id,
+        recipientId: targetUser.id,
+        relatedType: 'welcome',
+        relatedId: targetUser.id,
+        attachmentUrl: fileUrl || undefined,
+        attachmentName: fileName || undefined,
+        attachmentType: fileType || undefined
+      }
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to dispatch email' });
+  }
+});
+
 // Admin Route to delete a user
 app.delete('/api/admin/users/:id', requireAuth, (req, res) => {
   const currentUser = (req as any).user as User;
-  if (currentUser.role !== UserRole.ADMIN) {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
   }
 
   const targetUserId = req.params.id;
   if (targetUserId === currentUser.id) {
-    return res.status(400).json({ error: 'You cannot delete your own super admin account.' });
+    return res.status(400).json({ error: 'You cannot delete your own account.' });
   }
 
   const userIndex = db.users.findIndex(u => u.id === targetUserId);

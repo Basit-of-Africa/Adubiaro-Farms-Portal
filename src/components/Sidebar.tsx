@@ -155,6 +155,25 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
             </div>
           </button>
 
+          {/* Admin and Manager can manage/view Investors profiles */}
+          {(user.role === UserRole.ADMIN || user.role === UserRole.FARM_MANAGER) && (
+            <button
+              id="nav-investors"
+              onClick={() => {
+                setActiveTab('investors');
+                if (onClose) onClose();
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 cursor-pointer ${
+                activeTab === 'investors' 
+                  ? 'bg-gradient-to-r from-[#52B788] to-[#3B946A] text-[#0A2619] shadow-lg shadow-[#1B4332]/40 font-bold' 
+                  : 'text-gray-300 hover:bg-white/[0.04] hover:text-white'
+              }`}
+            >
+              <Users className="h-4.5 w-4.5" />
+              <span>Investors</span>
+            </button>
+          )}
+
           {/* Super Admin systemwide settings */}
           {user.role === UserRole.ADMIN && (
             <button

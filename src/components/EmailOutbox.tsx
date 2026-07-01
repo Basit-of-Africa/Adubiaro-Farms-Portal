@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Calendar, User, FileText, Send, ChevronRight, Inbox, Sparkles, CheckCircle2, AlertTriangle, HelpCircle, XCircle } from 'lucide-react';
+import { Mail, Calendar, User, FileText, Send, ChevronRight, Inbox, Sparkles, CheckCircle2, AlertTriangle, HelpCircle, XCircle, Paperclip } from 'lucide-react';
 import { SimulatedEmail } from '../types';
 
 interface EmailOutboxProps {
@@ -198,6 +198,23 @@ export default function EmailOutbox({ token, refreshSignal }: EmailOutboxProps) 
                           </span>
                         )}
                       </div>
+                      {selectedEmail.attachmentUrl && (
+                        <div className="flex items-center gap-1.5 text-[#2D6A4F] font-sans font-bold text-xs pt-1.5 border-t border-gray-100 dark:border-stone-800 mt-1.5">
+                          <Paperclip className="h-3.5 w-3.5" />
+                          <span>Attachment:</span>
+                          <a 
+                            href={selectedEmail.attachmentUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="underline hover:text-[#1B4332] cursor-pointer break-all"
+                          >
+                            {selectedEmail.attachmentName || 'View Attachment'}
+                          </a>
+                          <span className="text-[10px] text-gray-400 font-mono font-normal">
+                            ({selectedEmail.attachmentType || 'file'})
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
