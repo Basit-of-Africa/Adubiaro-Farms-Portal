@@ -132,7 +132,7 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
               }`}
             >
               <CreditCard className="h-4.5 w-4.5" />
-              <span>Investment Ledger</span>
+              <span>Ledger</span>
             </button>
           )}
 
