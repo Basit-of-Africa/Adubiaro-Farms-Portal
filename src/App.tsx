@@ -163,7 +163,7 @@ export default function App() {
       
       {/* Portal Announcement Banner */}
       {portalSettings?.announcementBanner && portalSettings?.bannerType !== 'none' && (
-        <div id="portal-announcement-banner" className={`text-center py-2 px-4 text-xs font-semibold flex items-center justify-center gap-2 select-none shadow-sm transition border-b leading-tight z-40 ${
+        <div id="portal-announcement-banner" className={`text-center py-2 px-4 text-xs font-semibold flex items-center justify-center gap-2 select-none shadow-sm transition border-b leading-tight z-40 lg:ml-[280px] ${
           portalSettings.bannerType === 'info' 
             ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900/40'
             : portalSettings.bannerType === 'warning'

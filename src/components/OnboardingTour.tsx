@@ -150,19 +150,20 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
 
   // Calculate Tooltip coordinate styles
   const getTooltipStyle = () => {
+    const margin = 16;
+    const tooltipWidth = Math.min(340, window.innerWidth - 32);
+
     if (!rect) {
       return {
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
         position: 'fixed' as const,
-        zIndex: 50
+        zIndex: 50,
+        width: `${tooltipWidth}px`
       };
     }
 
-    const margin = 16;
-    const tooltipWidth = 340;
-    
     // Default: try placing it below the element
     let top = rect.bottom + margin;
     let left = rect.left + (rect.width - tooltipWidth) / 2;
@@ -184,7 +185,8 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
       top: `${top}px`,
       left: `${left}px`,
       position: 'fixed' as const,
-      zIndex: 50
+      zIndex: 50,
+      width: `${tooltipWidth}px`
     };
   };
 
