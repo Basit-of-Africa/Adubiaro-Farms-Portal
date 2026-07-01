@@ -328,18 +328,21 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
         )}
 
         {/* Tooltip Card */}
-        <motion.div
-          ref={tooltipRef}
-          role="dialog"
-          aria-modal="true"
-          aria-label={step.title}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
+        <div
           style={getTooltipStyle()}
-          className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 dark:border-stone-800 w-full max-w-[340px] rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col justify-between select-text z-50"
+          className="fixed pointer-events-auto flex items-center justify-center"
         >
+          <motion.div
+            ref={tooltipRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={step.title}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+            className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 dark:border-stone-800 w-full rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col justify-between select-text relative"
+          >
           {/* Close button */}
           <button 
             onClick={handleComplete}
@@ -405,6 +408,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
             </div>
           </div>
         </motion.div>
+        </div>
       </div>
     </AnimatePresence>
   );
