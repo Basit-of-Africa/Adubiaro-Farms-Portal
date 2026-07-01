@@ -34,6 +34,27 @@ interface TourStep {
   position: 'bottom' | 'top' | 'center';
 }
 
+// Helper to get the currently visible DOM element among multiple possible selector matches or comma-separated selectors
+const getVisibleElement = (selectorStr: string): HTMLElement | null => {
+  if (!selectorStr) return null;
+  
+  const selectors = selectorStr.split(',').map(s => s.trim());
+  
+  for (const selector of selectors) {
+    const elements = document.querySelectorAll(selector);
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i] as HTMLElement;
+      const r = el.getBoundingClientRect();
+      // Element is visible if it has a non-zero layout size
+      if (r.width > 0 && r.height > 0) {
+        return el;
+      }
+    }
+  }
+  
+  return document.querySelector(selectors[0]) as HTMLElement | null;
+};
+
 export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTourProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -77,7 +98,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
       position: 'bottom'
     },
     {
-      selector: '#global-search-container',
+      selector: '#global-search-container, #mobile-search-container',
       title: "Universal Registry Lookup",
       description: "Quickly lookup specific estate blocks, land plots, contract serials, processed payout periods, or shared deed archives across the entire platform.",
       icon: <Search className="h-6 w-6 text-[#D4A017]" />,
@@ -124,7 +145,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
     }
 
     const updatePosition = () => {
-      const element = document.querySelector(step.selector);
+      const element = getVisibleElement(step.selector);
       if (element) {
         setRect(element.getBoundingClientRect());
       } else {
@@ -133,7 +154,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
     };
 
     // Scroll into view centered on step change
-    const element = document.querySelector(step.selector);
+    const element = getVisibleElement(step.selector);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -278,7 +299,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-45 overflow-hidden pointer-events-auto">
+      <div className="fixed inset-0 z-[150] overflow-hidden pointer-events-auto">
         {/* Spotlight Mask */}
         {rect ? (
           <motion.div 

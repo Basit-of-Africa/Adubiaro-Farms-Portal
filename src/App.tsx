@@ -269,7 +269,7 @@ export default function App() {
         <main id="main-content" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 pb-20 w-full">
         
         {/* Mobile Global Search Bar */}
-        <div className="lg:hidden w-full">
+        <div id="mobile-search-container" className="lg:hidden w-full">
           <GlobalSearch 
             token={authToken} 
             user={currentUser} 
