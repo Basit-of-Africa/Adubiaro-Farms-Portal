@@ -33,7 +33,8 @@ import {
   Menu,
   X,
   Sun,
-  Moon
+  Moon,
+  Smartphone
 } from 'lucide-react';
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
   });
 
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
 
   // Capture beforeinstallprompt for PWA downloadability
   useEffect(() => {
@@ -59,7 +61,10 @@ export default function App() {
   }, []);
 
   const handleInstallApp = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt) {
+      setIsInstallModalOpen(true);
+      return;
+    }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     console.log(`⚡ [PWA] User choice outcome: ${outcome}`);
@@ -447,6 +452,110 @@ export default function App() {
         isOpen={isTourOpen} 
         onClose={() => setIsTourOpen(false)} 
       />
+
+      {/* PWA Installation Guide Dialog */}
+      {isInstallModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div 
+            className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 dark:border-stone-800 rounded-3xl w-full max-w-md p-6 md:p-8 shadow-2xl relative overflow-hidden text-stone-800 dark:text-stone-100 animate-in fade-in zoom-in duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pwa-dialog-title"
+          >
+            <button
+              onClick={() => setIsInstallModalOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors"
+              aria-label="Close installation guide"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-[#1B4332]/10 dark:bg-[#52B788]/10 rounded-2xl text-[#1B4332] dark:text-[#52B788]">
+                <Smartphone className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 id="pwa-dialog-title" className="font-sans font-bold text-lg md:text-xl text-[#1B4332] dark:text-emerald-400">
+                  Install Farm Portal App
+                </h3>
+                <p className="text-xs text-stone-500 dark:text-stone-400">
+                  Progressive Web App (PWA)
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm leading-relaxed mb-6 text-stone-600 dark:text-stone-300">
+              Access the premium portal instantly from your device's home screen. Enjoy faster load times, fullscreen workspace, and offline capabilities.
+            </p>
+
+            <div className="space-y-4 max-h-[280px] overflow-y-auto pr-1">
+              {/* Contextual warning for iframe */}
+              {window.self !== window.top && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                  <p className="font-semibold flex items-center gap-1.5 mb-1 text-amber-900 dark:text-amber-200">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Viewing inside Preview Frame
+                  </p>
+                  <p>
+                    Browsers restrict installation triggers inside frame layouts. Please open the portal in a new tab to trigger the installation natively.
+                  </p>
+                </div>
+              )}
+
+              {/* Android Chrome */}
+              <div className="p-3.5 bg-stone-50 dark:bg-stone-800/40 rounded-xl border border-stone-100 dark:border-stone-800">
+                <h4 className="font-semibold text-xs text-[#1B4332] dark:text-emerald-400 flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">1</span>
+                  Android (Chrome)
+                </h4>
+                <p className="text-xs text-stone-600 dark:text-stone-400 leading-normal pl-7">
+                  Tap the <strong className="text-stone-800 dark:text-stone-200">three-dot menu icon</strong> at the top right of Chrome and select <strong className="text-[#1B4332] dark:text-emerald-400">"Add to Home screen"</strong> or <strong className="text-[#1B4332] dark:text-emerald-400">"Install app"</strong>.
+                </p>
+              </div>
+
+              {/* iOS Safari */}
+              <div className="p-3.5 bg-stone-50 dark:bg-stone-800/40 rounded-xl border border-stone-100 dark:border-stone-800">
+                <h4 className="font-semibold text-xs text-[#1B4332] dark:text-emerald-400 flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">2</span>
+                  iPhone & iPad (Safari)
+                </h4>
+                <p className="text-xs text-stone-600 dark:text-stone-400 leading-normal pl-7">
+                  Tap the <strong className="text-stone-800 dark:text-stone-200">Share button</strong> (square with up arrow), scroll down, and select <strong className="text-[#1B4332] dark:text-emerald-400">"Add to Home Screen"</strong>.
+                </p>
+              </div>
+
+              {/* Desktop PC */}
+              <div className="p-3.5 bg-stone-50 dark:bg-stone-800/40 rounded-xl border border-stone-100 dark:border-stone-800">
+                <h4 className="font-semibold text-xs text-[#1B4332] dark:text-emerald-400 flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">3</span>
+                  Desktop PC (Chrome/Edge)
+                </h4>
+                <p className="text-xs text-stone-600 dark:text-stone-400 leading-normal pl-7">
+                  Click the <strong className="text-[#1B4332] dark:text-emerald-400">Install icon</strong> (computer screen with a down arrow) on the right side of the URL address bar.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col sm:flex-row gap-3 pt-4 border-t border-stone-100 dark:border-stone-800">
+              <a 
+                href={window.location.href} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold bg-[#1B4332] hover:bg-[#2D6A4F] text-white transition-all duration-300 shadow-md text-center cursor-pointer"
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span>Open Standalone Tab</span>
+              </a>
+              <button
+                onClick={() => setIsInstallModalOpen(false)}
+                className="flex-1 px-4 py-3 rounded-xl text-xs font-medium bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 transition-all text-center"
+              >
+                Got it, Thanks!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
