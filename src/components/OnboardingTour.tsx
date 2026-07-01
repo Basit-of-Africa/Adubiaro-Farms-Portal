@@ -96,107 +96,159 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
 
   // Measure tooltip size to prevent layout overflow
   useEffect(() => {
-    if (tooltipRef.current) {
-      setTooltipHeight(tooltipRef.current.offsetHeight);
-    }
+    const measure = () => {
+      if (tooltipRef.current) {
+        setTooltipHeight(tooltipRef.current.offsetHeight);
+      }
+    };
+    measure();
+    // Small timeout to let rendering layout stabilize
+    const timer = setTimeout(measure, 50);
+    window.addEventListener('resize', measure);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', measure);
+    };
   }, [currentStep, isOpen]);
 
-  // Recalculate target element position
+  // Track active target element position with multi-stage updates as smooth scroll completes
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setRect(null);
+      return;
+    }
 
     if (!step.selector) {
       setRect(null);
       return;
     }
 
-    const element = document.querySelector(step.selector);
-    if (element) {
-      // Scroll the element into view gracefully
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      const timer = setTimeout(() => {
-        const r = element.getBoundingClientRect();
-        setRect(r);
-      }, 500);
-
-      return () => clearTimeout(timer);
-    } else {
-      setRect(null);
-    }
-  }, [currentStep, step.selector, isOpen]);
-
-  // Handle resize & scroll updates
-  useEffect(() => {
-    if (!isOpen || !rect || !step.selector) return;
-
-    const updateRect = () => {
+    const updatePosition = () => {
       const element = document.querySelector(step.selector);
       if (element) {
         setRect(element.getBoundingClientRect());
+      } else {
+        setRect(null);
       }
     };
 
-    window.addEventListener('resize', updateRect);
-    window.addEventListener('scroll', updateRect, true);
+    // Scroll into view centered on step change
+    const element = document.querySelector(step.selector);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Run initial update plus delayed updates to capture final state after smooth scroll ends
+    updatePosition();
+    const timers = [
+      setTimeout(updatePosition, 100),
+      setTimeout(updatePosition, 300),
+      setTimeout(updatePosition, 600),
+      setTimeout(updatePosition, 1000)
+    ];
+
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
 
     return () => {
-      window.removeEventListener('resize', updateRect);
-      window.removeEventListener('scroll', updateRect, true);
+      timers.forEach(t => clearTimeout(t));
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [rect, currentStep, step.selector, isOpen]);
+  }, [currentStep, step.selector, isOpen]);
 
   if (!isOpen) return null;
 
-  // Calculate Tooltip coordinate styles
+  // Calculate Tooltip coordinate styles with strict anti-overlapping guarantees
   const getTooltipStyle = () => {
     const margin = 16;
     const tooltipWidth = Math.min(340, window.innerWidth - 32);
 
-    if (window.innerWidth < 768) {
-      return {
-        bottom: '20px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        position: 'fixed' as const,
-        zIndex: 50,
-        width: `${tooltipWidth}px`
-      };
-    }
-
+    // If there is no targeted spotlight element, place it dead center in the viewport
     if (!rect) {
       return {
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
         position: 'fixed' as const,
-        zIndex: 50,
+        zIndex: 100,
         width: `${tooltipWidth}px`
       };
     }
 
-    // Default: try placing it below the element
+    // For Mobile & Tablet views (width < 1024px) or short screens (height < 768px):
+    // Use the foolproof "opposite vertical half" placement.
+    // If the spotlight's vertical center is in the top half of the screen, place the tooltip at the bottom.
+    // If the spotlight's vertical center is in the bottom half of the screen, place the tooltip at the top.
+    const isConstrainedScreen = window.innerWidth < 1024 || window.innerHeight < 768;
+
+    if (isConstrainedScreen) {
+      const spotlightCenterY = rect.top + rect.height / 2;
+      const isInTopHalf = spotlightCenterY < window.innerHeight / 2;
+
+      if (isInTopHalf) {
+        return {
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          position: 'fixed' as const,
+          zIndex: 100,
+          width: `${tooltipWidth}px`
+        };
+      } else {
+        return {
+          top: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          position: 'fixed' as const,
+          zIndex: 100,
+          width: `${tooltipWidth}px`
+        };
+      }
+    }
+
+    // On Desktop PCs (width >= 1024px and height >= 768px), try a smart relative placement
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
     let top = rect.bottom + margin;
     let left = rect.left + (rect.width - tooltipWidth) / 2;
 
     // Boundary check for horizontal overflow
-    left = Math.max(16, Math.min(window.innerWidth - tooltipWidth - 16, left));
+    left = Math.max(24, Math.min(window.innerWidth - tooltipWidth - 24, left));
 
-    // If it overflows the bottom viewport boundary, place it above the element
-    if (top + tooltipHeight > window.innerHeight) {
+    // If there's not enough space below, place it above the element
+    if (spaceBelow < tooltipHeight + margin && spaceAbove > tooltipHeight + margin) {
       top = rect.top - tooltipHeight - margin;
-    }
-
-    // Safety fallback
-    if (top < 16) {
-      top = rect.bottom + margin;
+    } else if (spaceBelow < tooltipHeight + margin && spaceAbove < tooltipHeight + margin) {
+      // Fallback: If neither above nor below has enough space, use the vertical opposite-half method
+      const spotlightCenterY = rect.top + rect.height / 2;
+      if (spotlightCenterY < window.innerHeight / 2) {
+        return {
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          position: 'fixed' as const,
+          zIndex: 100,
+          width: `${tooltipWidth}px`
+        };
+      } else {
+        return {
+          top: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          position: 'fixed' as const,
+          zIndex: 100,
+          width: `${tooltipWidth}px`
+        };
+      }
     }
 
     return {
       top: `${top}px`,
       left: `${left}px`,
       position: 'fixed' as const,
-      zIndex: 50,
+      zIndex: 100,
       width: `${tooltipWidth}px`
     };
   };
