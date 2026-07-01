@@ -15,7 +15,8 @@ import {
   ShieldAlert,
   Users,
   Settings,
-  X
+  X,
+  Smartphone
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -26,9 +27,21 @@ interface SidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
   logoText?: string;
+  deferredPrompt?: any;
+  onInstallApp?: () => void;
 }
 
-export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpen, onClose, logoText }: SidebarProps) {
+export default function Sidebar({ 
+  user, 
+  activeTab, 
+  setActiveTab, 
+  onLogout, 
+  isOpen, 
+  onClose, 
+  logoText,
+  deferredPrompt,
+  onInstallApp
+}: SidebarProps) {
   const getRoleBadgeColor = (role: UserRole) => {
     switch (role) {
       case UserRole.ADMIN: return 'bg-red-500/15 text-red-500 border-red-500/25';
@@ -196,7 +209,18 @@ export default function Sidebar({ user, activeTab, setActiveTab, onLogout, isOpe
       </div>
 
       {/* Logout Action Area */}
-      <div className="p-6">
+      <div className="p-6 space-y-3 border-t border-white/[0.04] pt-5">
+        {deferredPrompt && (
+          <button
+            id="nav-install-pwa"
+            onClick={onInstallApp}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-semibold bg-gradient-to-r from-[#D4A017] to-amber-500 text-[#0F291E] hover:from-[#E5B128] hover:to-amber-600 transition-all duration-300 cursor-pointer shadow-md shadow-[#D4A017]/10 border border-amber-400/20"
+          >
+            <Smartphone className="h-4.5 w-4.5 shrink-0" />
+            <span>Install App Portal</span>
+          </button>
+        )}
+
         <button
           id="nav-logout"
           onClick={onLogout}

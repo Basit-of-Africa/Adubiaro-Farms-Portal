@@ -153,6 +153,17 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
     const margin = 16;
     const tooltipWidth = Math.min(340, window.innerWidth - 32);
 
+    if (window.innerWidth < 768) {
+      return {
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        position: 'fixed' as const,
+        zIndex: 50,
+        width: `${tooltipWidth}px`
+      };
+    }
+
     if (!rect) {
       return {
         top: '50%',
@@ -215,7 +226,7 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-45 overflow-hidden select-none pointer-events-auto">
+      <div className="fixed inset-0 z-45 overflow-hidden pointer-events-auto">
         {/* Spotlight Mask */}
         {rect ? (
           <motion.div 
@@ -246,12 +257,15 @@ export default function OnboardingTour({ user, isOpen, onClose }: OnboardingTour
         {/* Tooltip Card */}
         <motion.div
           ref={tooltipRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={step.title}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
           style={getTooltipStyle()}
-          className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 dark:border-stone-800 w-full max-w-[340px] rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col justify-between"
+          className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 dark:border-stone-800 w-full max-w-[340px] rounded-3xl p-6 shadow-2xl overflow-hidden flex flex-col justify-between select-text z-50"
         >
           {/* Close button */}
           <button 

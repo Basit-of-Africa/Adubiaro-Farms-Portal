@@ -45,6 +45,26 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('theme') === 'dark';
   });
+
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // Capture beforeinstallprompt for PWA downloadability
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`⚡ [PWA] User choice outcome: ${outcome}`);
+    setDeferredPrompt(null);
+  };
   
   // Refresh signals allowing children tables to update whenever operations forms are saved
   const [refreshSignal, setRefreshSignal] = useState<number>(0);
@@ -226,6 +246,8 @@ export default function App() {
         }} 
         onLogout={handleLogout} 
         logoText={portalSettings?.logoText}
+        deferredPrompt={deferredPrompt}
+        onInstallApp={handleInstallApp}
       />
 
       {/* Mobile Sidebar backdrop */}
