@@ -10,7 +10,9 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
-  FileText
+  FileText,
+  Mail,
+  Paperclip
 } from 'lucide-react';
 import { User, UserRole } from '../types';
 
@@ -134,6 +136,12 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
         return (
           <div className="h-9 w-9 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0 shadow-inner">
             <FileCheck className="h-4.5 w-4.5" />
+          </div>
+        );
+      case 'message_received':
+        return (
+          <div className="h-9 w-9 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 shrink-0 shadow-inner">
+            <Mail className="h-4.5 w-4.5" />
           </div>
         );
       default:
@@ -261,6 +269,7 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
             <div className={`p-6 text-white flex justify-between items-start ${
               selectedAlert.type === 'roi_payout' ? 'bg-gradient-to-r from-[#D4A017] to-amber-600' :
               selectedAlert.type === 'document_upload' ? 'bg-gradient-to-r from-blue-600 to-indigo-700' :
+              selectedAlert.type === 'message_received' ? 'bg-gradient-to-r from-teal-600 to-emerald-700' :
               'bg-gradient-to-r from-[#143427] to-[#2D6A4F]'
             }`}>
               <div>
@@ -342,9 +351,7 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
                       </div>
                     )}
                   </>
-                )}
-
-                {selectedAlert.type === 'document_upload' && (
+                )}                 {selectedAlert.type === 'document_upload' && (
                   <>
                     <div className="bg-blue-50/30 p-3 rounded-xl border border-blue-100/50 col-span-2">
                       <span className="text-blue-700/60 font-mono text-[10px] uppercase font-bold tracking-wider">File Attachment</span>
@@ -354,6 +361,44 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
                       <div className="col-span-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100/50">
                         <span className="text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">Document Summary</span>
                         <p className="text-gray-700 mt-1 leading-relaxed text-xs">{selectedAlert.meta.description}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {selectedAlert.type === 'message_received' && (
+                  <>
+                    <div className="bg-teal-50/30 p-3 rounded-xl border border-teal-100/50">
+                      <span className="text-teal-700/60 font-mono text-[10px] uppercase font-bold tracking-wider">Sender</span>
+                      <p className="text-teal-800 font-bold mt-1 text-sm">{selectedAlert.meta.senderName}</p>
+                    </div>
+                    {selectedAlert.meta.category && (
+                      <div className="bg-gray-50/50 p-3 rounded-xl border border-gray-100/50">
+                        <span className="text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">Category</span>
+                        <p className="text-gray-800 font-bold mt-1 text-sm capitalize">{selectedAlert.meta.category}</p>
+                      </div>
+                    )}
+                    {selectedAlert.meta.body && (
+                      <div className="col-span-2 bg-gray-50/50 p-3 rounded-xl border border-gray-100/50 max-h-48 overflow-y-auto">
+                        <span className="text-gray-400 font-mono text-[10px] uppercase font-bold tracking-wider">Message Content</span>
+                        <p className="text-gray-700 whitespace-pre-wrap mt-1 leading-relaxed text-xs">{selectedAlert.meta.body}</p>
+                      </div>
+                    )}
+                    {selectedAlert.meta.attachmentUrl && (
+                      <div className="col-span-2 bg-teal-50/20 p-3 rounded-xl border border-teal-100/30 flex items-center justify-between">
+                        <div>
+                          <span className="text-teal-700/60 font-mono text-[10px] uppercase font-bold tracking-wider">File Attachment</span>
+                          <p className="text-teal-900 font-bold text-xs truncate max-w-xs">{selectedAlert.meta.attachmentName || 'Attachment'}</p>
+                        </div>
+                        <a
+                          href={selectedAlert.meta.attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-bold cursor-pointer transition duration-150"
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          <span>View</span>
+                        </a>
                       </div>
                     )}
                   </>
@@ -380,6 +425,18 @@ export default function NotificationBell({ user, token, refreshSignal }: Notific
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>Download Attachment</span>
+                  </a>
+                )}
+
+                {selectedAlert.type === 'message_received' && selectedAlert.meta?.attachmentUrl && (
+                  <a
+                    href={selectedAlert.meta.attachmentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold cursor-pointer transition duration-150 shadow-sm"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>Open Attachment</span>
                   </a>
                 )}
               </div>

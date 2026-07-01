@@ -2736,6 +2736,113 @@ app.post('/api/admin/users/:id/message', requireAuth, upload.single('attachment'
   }
 });
 
+// Admin Route to broadcast message/attachment to multiple investors in one action
+app.post('/api/admin/broadcast', requireAuth, upload.single('attachment'), async (req, res) => {
+  const currentUser = (req as any).user as User;
+  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.FARM_MANAGER) {
+    return res.status(403).json({ error: 'Admin or Manager access required' });
+  }
+
+  const { recipientIds, subject, body } = req.body;
+  if (!recipientIds) {
+    return res.status(400).json({ error: 'Recipient IDs are required.' });
+  }
+  if (!subject || !body) {
+    return res.status(400).json({ error: 'Subject and body are required.' });
+  }
+
+  const ids = recipientIds.split(',').map((id: string) => id.trim()).filter(Boolean);
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'At least one valid recipient must be selected.' });
+  }
+
+  let fileUrl = '';
+  let fileName = '';
+  let fileType = '';
+
+  if (req.file) {
+    const file = req.file;
+    fileName = file.originalname;
+    fileUrl = `/uploads/${file.filename}`;
+    fileType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+
+    if (process.env.CLOUDINARY_URL) {
+      try {
+        const cld = getCloudinary();
+        const cldRes = await cld.uploader.upload(file.path, {
+          folder: 'broadcast_messages',
+          resource_type: 'auto'
+        });
+        fileUrl = cldRes.secure_url;
+        fs.unlinkSync(file.path);
+      } catch (e) {
+        console.error('Cloudinary broadcast upload failure, using local route instead', e);
+      }
+    }
+  }
+
+  let mediaHtml = '';
+  if (fileUrl) {
+    if (fileType === 'image') {
+      mediaHtml = `
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+          <p style="font-size: 12px; color: #555; margin-bottom: 8px;"><b>Attached Image:</b> ${fileName}</p>
+          <img src="${fileUrl}" style="max-width: 100%; border-radius: 8px; border: 1px solid #ddd;" alt="${fileName}" />
+          <p style="font-size: 11px; margin-top: 5px;"><a href="${fileUrl}" target="_blank" style="color: #1B4332; text-decoration: underline;">View Full Image</a></p>
+        </div>
+      `;
+    } else {
+      mediaHtml = `
+        <div style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+          <p style="font-size: 12px; color: #555; margin-bottom: 8px;"><b>Attached Video:</b> ${fileName}</p>
+          <div style="padding: 12px; background-color: #f9f9f9; border-radius: 8px; border: 1px solid #eee;">
+            <a href="${fileUrl}" target="_blank" style="color: #1B4332; font-weight: bold; text-decoration: underline;">▶ Play Attached Video</a>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  const textBody = fileUrl ? `${body}\n\n[Attachment: ${fileName} - ${fileUrl}]` : body;
+  const htmlBody = `<div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: auto; border: 1px solid #eee; border-radius: 12px;">
+    <h3 style="color: #1B4332; margin-top: 0;">Broadcast Message from ${currentUser.name} (${currentUser.role === UserRole.ADMIN ? 'Administrator' : 'Farm Manager'})</h3>
+    <p>${body.replace(/\n/g, '<br/>')}</p>
+    ${mediaHtml}
+    <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
+    <p style="font-size: 11px; color: #888;">This email is dispatched from Adubiaro Farm Estates Private Portal.</p>
+  </div>`;
+
+  let sentCount = 0;
+  for (const id of ids) {
+    const targetUser = db.users.find(u => u.id === id);
+    if (!targetUser) continue;
+
+    try {
+      await dispatchEmail(
+        targetUser.email,
+        subject,
+        textBody,
+        htmlBody,
+        'Broadcast Communication',
+        {
+          senderId: currentUser.id,
+          recipientId: targetUser.id,
+          relatedType: 'welcome',
+          relatedId: targetUser.id,
+          attachmentUrl: fileUrl || undefined,
+          attachmentName: fileName || undefined,
+          attachmentType: fileType || undefined
+        }
+      );
+      sentCount++;
+    } catch (err) {
+      console.error(`Failed to send broadcast email to ${targetUser.email}:`, err);
+    }
+  }
+
+  res.json({ success: true, count: sentCount });
+});
+
 // Admin Route to delete a user
 app.delete('/api/admin/users/:id', requireAuth, (req, res) => {
   const currentUser = (req as any).user as User;
@@ -3232,6 +3339,36 @@ app.get('/api/notifications', requireAuth, (req, res) => {
         }
       });
     }
+  });
+
+  // Gather direct messages/emails sent to the user
+  const directEmails = db.simulatedEmails.filter(email => {
+    const isRecipient = email.recipientId === user.id || (email.to && email.to.toLowerCase() === user.email.toLowerCase());
+    const isDuplicate = email.relatedType === 'update' || email.relatedType === 'document' || email.relatedType === 'financial';
+    return isRecipient && !isDuplicate;
+  });
+
+  directEmails.forEach(email => {
+    const sender = db.users.find(u => u.id === email.senderId);
+    const senderName = sender ? sender.name : (email.senderId ? 'Administrator' : 'System');
+    notifications.push({
+      id: `email-${email.id}`,
+      type: 'message_received',
+      title: email.subject || 'New Message Received',
+      message: email.body ? (email.body.length > 150 ? email.body.substring(0, 150) + '...' : email.body) : 'You have received a new message/mail.',
+      date: email.sentAt || new Date().toISOString(),
+      relatedId: email.id,
+      meta: {
+        senderId: email.senderId,
+        senderName,
+        subject: email.subject,
+        body: email.body,
+        attachmentUrl: email.attachmentUrl,
+        attachmentName: email.attachmentName,
+        attachmentType: email.attachmentType,
+        category: email.category
+      }
+    });
   });
 
   // Sort by date descending
