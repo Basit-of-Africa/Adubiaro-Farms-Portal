@@ -1,0 +1,24 @@
+{
+  "name": "Adubiaro Farm Estate Portal",
+  "short_name": "Adubiaro",
+  "description": "Premium Private Portal for Adubiaro Farm Estates Investors and Managers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1B4332",
+  "theme_color": "#1B4332",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
