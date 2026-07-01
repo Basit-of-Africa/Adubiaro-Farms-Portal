@@ -15,7 +15,47 @@ import {
   ArrowRight,
   Download
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend 
+} from 'recharts';
 import { User, FinancialStatus } from '../types';
+
+const periodOrder: Record<string, number> = {
+  'Q1': 1, 'Q2': 2, 'Q3': 3, 'Q4': 4,
+  'JANUARY': 1, 'FEBRUARY': 2, 'MARCH': 3, 'APRIL': 4, 'MAY': 5, 'JUNE': 6,
+  'JULY': 7, 'AUGUST': 8, 'SEPTEMBER': 9, 'OCTOBER': 10, 'NOVEMBER': 11, 'DECEMBER': 12,
+  'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'JUN': 6, 'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
+};
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white dark:bg-stone-900 border border-[#2D6A4F]/20 p-4 rounded-xl shadow-xl font-sans text-xs space-y-1.5">
+        <p className="font-bold text-[#1B4332] dark:text-emerald-400 font-mono mb-1">{label}</p>
+        {payload.map((pld: any, index: number) => {
+          const isNaira = pld.name.toLowerCase().includes('payout') || pld.name.toLowerCase().includes('returns') || pld.name.toLowerCase().includes('cumulative');
+          const valueStr = isNaira 
+            ? `₦${Number(pld.value).toLocaleString()}` 
+            : `${pld.value}%`;
+          return (
+            <div key={index} className="flex items-center justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400 font-medium">{pld.name}:</span>
+              <span className="font-extrabold font-mono" style={{ color: pld.color }}>{valueStr}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+};
 
 interface FinancialsViewProps {
   user: User;
@@ -94,6 +134,47 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
   const totalPending = financials.filter(f => f.status === 'pending').reduce((s, f) => s + f.payoutAmount, 0);
   const totalRoiCombined = financials.reduce((sum, f) => sum + (f.roiPercentage || 0), 0);
   const avgRoi = financials.length > 0 ? (totalRoiCombined / financials.length) : 0;
+
+  // Process data for charts
+  const aggregatedMap: Record<string, { label: string; payout: number; roi: number; count: number; sortKey: number }> = {};
+  financials.forEach(f => {
+    const yearVal = parseInt(f.year) || 2026;
+    const p = String(f.period).toUpperCase();
+    const order = periodOrder[p] || 0;
+    const key = `${yearVal}-${p}`;
+    const label = `${f.period} ${f.year}`;
+
+    if (!aggregatedMap[key]) {
+      aggregatedMap[key] = {
+        label,
+        payout: 0,
+        roi: 0,
+        count: 0,
+        sortKey: yearVal * 100 + order
+      };
+    }
+    
+    aggregatedMap[key].payout += (f.payoutAmount || 0);
+    aggregatedMap[key].roi += (f.roiPercentage || 0);
+    aggregatedMap[key].count += 1;
+  });
+
+  const chartData = Object.values(aggregatedMap)
+    .sort((a, b) => a.sortKey - b.sortKey)
+    .map(item => ({
+      label: item.label,
+      payout: item.payout,
+      roi: item.count > 0 ? Number((item.roi / item.count).toFixed(1)) : 0,
+    }));
+
+  let cumulativeSum = 0;
+  const trendData = chartData.map(item => {
+    cumulativeSum += item.payout;
+    return {
+      ...item,
+      cumulativePayout: cumulativeSum
+    };
+  });
 
   const handleExportToCSV = () => {
     if (financials.length === 0) return;
@@ -208,6 +289,119 @@ export default function FinancialsView({ user, token, refreshSignal }: Financial
         </div>
 
       </div>
+
+      {/* Charts Section */}
+      {financials.length > 0 && (
+        <div id="financials-charts" className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* Chart 1: ROI & Payouts */}
+          <div className="bg-white dark:bg-stone-900 p-6 rounded-2xl border border-[#2D6A4F]/10 dark:border-stone-800 shadow-premium">
+            <div className="flex flex-col mb-6">
+              <h3 className="font-serif font-extrabold text-base text-[#1B4332] dark:text-emerald-400">Quarterly ROI & Payout Performance</h3>
+              <p className="text-xs text-stone-500 dark:text-stone-400 font-mono mt-1">Comparison of net payout amounts (₦) against yield ROI percentages</p>
+            </div>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" className="dark:stroke-stone-800" />
+                  <XAxis 
+                    dataKey="label" 
+                    stroke="#888888" 
+                    fontSize={10}
+                    fontFamily="JetBrains Mono, monospace"
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    yAxisId="left"
+                    stroke="#1B4332" 
+                    fontSize={10}
+                    fontFamily="JetBrains Mono, monospace"
+                    tickLine={false}
+                    tickFormatter={(value) => `₦${value >= 1000000 ? (value / 1000000).toFixed(1) + 'M' : value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                  />
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="#D4A017" 
+                    fontSize={10}
+                    fontFamily="JetBrains Mono, monospace"
+                    tickLine={false}
+                    tickFormatter={(value) => `${value}%`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '11px', fontFamily: 'Inter, sans-serif', paddingTop: '10px' }}
+                    verticalAlign="bottom"
+                  />
+                  <Line 
+                    yAxisId="left"
+                    type="monotone" 
+                    dataKey="payout" 
+                    name="Quarter Payout" 
+                    stroke="#1B4332" 
+                    strokeWidth={3} 
+                    activeDot={{ r: 6 }} 
+                    dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                  />
+                  <Line 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="roi" 
+                    name="Yield ROI %" 
+                    stroke="#D4A017" 
+                    strokeWidth={2} 
+                    dot={{ r: 3, strokeWidth: 1, fill: '#fff' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Chart 2: Investment Growth Trend */}
+          <div className="bg-white dark:bg-stone-900 p-6 rounded-2xl border border-[#2D6A4F]/10 dark:border-stone-800 shadow-premium">
+            <div className="flex flex-col mb-6">
+              <h3 className="font-serif font-extrabold text-base text-[#1B4332] dark:text-emerald-400">Cumulative Investment Growth</h3>
+              <p className="text-xs text-stone-500 dark:text-stone-400 font-mono mt-1">Growth progression of cumulative ROI returns across billing cycles</p>
+            </div>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" className="dark:stroke-stone-800" />
+                  <XAxis 
+                    dataKey="label" 
+                    stroke="#888888" 
+                    fontSize={10}
+                    fontFamily="JetBrains Mono, monospace"
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    stroke="#2D6A4F" 
+                    fontSize={10}
+                    fontFamily="JetBrains Mono, monospace"
+                    tickLine={false}
+                    tickFormatter={(value) => `₦${value >= 1000000 ? (value / 1000000).toFixed(1) + 'M' : value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value}`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '11px', fontFamily: 'Inter, sans-serif', paddingTop: '10px' }}
+                    verticalAlign="bottom"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="cumulativePayout" 
+                    name="Cumulative Returns" 
+                    stroke="#2D6A4F" 
+                    strokeWidth={4} 
+                    activeDot={{ r: 7 }} 
+                    dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* Main Table */}
       <div className="bg-white rounded-2xl border border-[#2D6A4F]/10 shadow-premium overflow-hidden p-6">
